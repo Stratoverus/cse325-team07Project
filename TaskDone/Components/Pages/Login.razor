@@ -1,0 +1,35 @@
+@page "/login"
+
+<h3>Login</h3>
+
+<div class="form-group">
+    <label>Email</label>
+    <input @bind="email" class="form-control" />
+</div>
+
+<div class="form-group">
+    <label>Password</label>
+    <input type="password" @bind="password" class="form-control" />
+</div>
+
+<button class="btn btn-primary" @onclick="HandleLogin">Login</button>
+
+<p>@message</p>
+
+@code {
+    string email = "";
+    string password = "";
+    string message = "";
+
+    void HandleLogin()
+    {
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+        {
+            message = "Please enter email and password.";
+        }
+        else
+        {
+            message = "Login clicked (no backend yet)";
+        }
+    }
+}
