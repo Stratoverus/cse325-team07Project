@@ -1,20 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\narra\\OneDrive\\Documentos\\BYU_I\\cse325-team07Project\\TaskDone\\TaskDone.csproj": {}
+    "C:\\Users\\menji\\Desktop\\cse325-team07Project\\TaskDone\\TaskDone.csproj": {}
   },
   "projects": {
-    "C:\\Users\\narra\\OneDrive\\Documentos\\BYU_I\\cse325-team07Project\\TaskDone\\TaskDone.csproj": {
+    "C:\\Users\\menji\\Desktop\\cse325-team07Project\\TaskDone\\TaskDone.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\narra\\OneDrive\\Documentos\\BYU_I\\cse325-team07Project\\TaskDone\\TaskDone.csproj",
+        "projectUniqueName": "C:\\Users\\menji\\Desktop\\cse325-team07Project\\TaskDone\\TaskDone.csproj",
         "projectName": "TaskDone",
-        "projectPath": "C:\\Users\\narra\\OneDrive\\Documentos\\BYU_I\\cse325-team07Project\\TaskDone\\TaskDone.csproj",
-        "packagesPath": "C:\\Users\\narra\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\narra\\OneDrive\\Documentos\\BYU_I\\cse325-team07Project\\TaskDone\\obj\\",
+        "projectPath": "C:\\Users\\menji\\Desktop\\cse325-team07Project\\TaskDone\\TaskDone.csproj",
+        "packagesPath": "C:\\Users\\menji\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\menji\\Desktop\\cse325-team07Project\\TaskDone\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "C:\\Users\\narra\\AppData\\Roaming\\NuGet\\NuGet.Config"
+          "C:\\Users\\menji\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net10.0"
@@ -49,6 +49,10 @@
               "target": "Package",
               "version": "[10.0.3, )",
               "autoReferenced": true
+            },
+            "Supabase": {
+              "target": "Package",
+              "version": "[1.1.1, )"
             }
           },
           "imports": [

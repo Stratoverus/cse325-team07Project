@@ -2,9 +2,25 @@ using TaskDone.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 
+
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+// Supabase variables and connection
+    var url = Environment.GetEnvironmentVariable("SUPABASE_URL");
+    var key = Environment.GetEnvironmentVariable("SUPABASE_KEY");
+
+    var options = new Supabase.SupabaseOptions
+    {
+        AutoConnectRealtime = true
+    };
+    
+    var supabase = new Supabase.Client(url, key, options);
+    await supabase.InitializeAsync();
+
+    builder.Services.AddSingleton(supabase);
+// ---
 
 var app = builder.Build();
 

@@ -1,7 +1,29 @@
 ﻿@page "/"
+@inject Supabase.Client Supabase
 
 <PageTitle>Home</PageTitle>
 
 <h1>Hello, world!</h1>
 
 Welcome to your new app.
+
+
+<h1>Test Supabase</h1>
+<p>@mensaje</p>
+
+@code {
+    private string mensaje = "Connecting...";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await Supabase.InitializeAsync();
+            mensaje = "✅ Success!";
+        }
+        catch (Exception ex)
+        {
+            mensaje = $"❌ Error: {ex.Message}";
+        }
+    }
+}
