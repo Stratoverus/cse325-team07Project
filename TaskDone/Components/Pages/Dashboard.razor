@@ -1,0 +1,73 @@
+@page "/dashboard"
+
+<h3>Dashboard</h3>
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card text-white bg-primary mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Total Tasks</h5>
+                <p class="card-text">@totalTasks</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-white bg-success mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Completed Tasks</h5>
+                <p class="card-text">@completedTasks</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-white bg-warning mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Pending Tasks</h5>
+                <p class="card-text">@pendingTasks</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<h4>Recent Tasks</h4>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Title</th>
+            <th>Status</th>
+            <th>Due Date</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach(var task in recentTasks)
+        {
+            <tr>
+                <td>@task.Title</td>
+                <td>@(task.IsDone ? "Completed" : "Pending")</td>
+                <td>@task.DueDate.ToShortDateString()</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    // Placeholder stats for now
+    int totalTasks = 10;
+    int completedTasks = 6;
+    int pendingTasks => totalTasks - completedTasks;
+
+    // Placeholder recent tasks
+    List<TaskItem> recentTasks = new List<TaskItem>
+    {
+        new TaskItem { Title = "Finish Login UI", IsDone = true, DueDate = DateTime.Today.AddDays(-1) },
+        new TaskItem { Title = "Create Dashboard Page", IsDone = false, DueDate = DateTime.Today },
+        new TaskItem { Title = "Setup NavMenu Links", IsDone = true, DueDate = DateTime.Today.AddDays(-2) }
+    };
+
+    class TaskItem
+    {
+        public string Title { get; set; }
+        public bool IsDone { get; set; }
+        public DateTime DueDate { get; set; }
+    }
+}
