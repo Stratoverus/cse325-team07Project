@@ -1,13 +1,25 @@
 @page "/dashboard"
+@rendermode InteractiveServer
+
+@using System.Linq
+@using TaskDone.Services
+@using TaskDone.Models
+
+@inject TaskService TaskService
+@inject NavigationManager Navigation
 
 <h3>Dashboard</h3>
+
+<div class="mb-3">
+    <NavLink class="btn btn-success" href="/add-task">Add New Task</NavLink>
+</div>
 
 <div class="row">
     <div class="col-md-4">
         <div class="card text-white bg-primary mb-3">
             <div class="card-body">
                 <h5 class="card-title">Total Tasks</h5>
-                <p class="card-text">@totalTasks</p>
+                <p class="card-text">@TaskService.AllTasks.Count</p>
             </div>
         </div>
     </div>
@@ -15,7 +27,7 @@
         <div class="card text-white bg-success mb-3">
             <div class="card-body">
                 <h5 class="card-title">Completed Tasks</h5>
-                <p class="card-text">@completedTasks</p>
+                <p class="card-text">@TaskService.AllTasks.Count(t => t.IsDone)</p>
             </div>
         </div>
     </div>
@@ -23,7 +35,7 @@
         <div class="card text-white bg-warning mb-3">
             <div class="card-body">
                 <h5 class="card-title">Pending Tasks</h5>
-                <p class="card-text">@pendingTasks</p>
+                <p class="card-text">@TaskService.AllTasks.Count(t => !t.IsDone)</p>
             </div>
         </div>
     </div>
@@ -34,40 +46,112 @@
     <thead>
         <tr>
             <th>Title</th>
+            <th>Assigned To</th>
             <th>Status</th>
             <th>Due Date</th>
+            <th>Actions</th>
         </tr>
     </thead>
     <tbody>
-        @foreach(var task in recentTasks)
+        @foreach (var task in TaskService.AllTasks.OrderBy(t => t.DueDate))
         {
             <tr>
-                <td>@task.Title</td>
-                <td>@(task.IsDone ? "Completed" : "Pending")</td>
-                <td>@task.DueDate.ToShortDateString()</td>
+                @if (editingTask == task)
+                {
+                    <!-- EDIT MODE -->
+                    <td>
+                        <InputText class="form-control" @bind-Value="tempTask.Title" />
+                    </td>
+                    <td>
+                        <InputText class="form-control" @bind-Value="tempTask.AssignedTo" />
+                    </td>
+                    <td>@(task.IsDone ? "Completed" : "Pending")</td>
+                    <td>
+                        <InputDate class="form-control" @bind-Value="tempTask.DueDate" />
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-success" @onclick="SaveEdit">Save</button>
+                        <button class="btn btn-sm btn-secondary ms-2" @onclick="CancelEdit">Cancel</button>
+                    </td>
+                }
+                else
+                {
+                    <!-- NORMAL MODE -->
+                    <td>@task.Title</td>
+                    <td>@task.AssignedTo</td>
+                    <td>@(task.IsDone ? "Completed" : "Pending")</td>
+                    <td>@task.DueDate.ToShortDateString()</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-secondary"
+                                @onclick="() => ToggleDone(task)">
+                            @(task.IsDone ? "Re-open" : "Complete")
+                        </button>
+
+                        <button class="btn btn-sm btn-outline-primary ms-2"
+                                @onclick="() => StartEdit(task)">
+                            Edit
+                        </button>
+
+                        <button class="btn btn-sm btn-outline-danger ms-2"
+                                @onclick="() => DeleteTask(task)">
+                            Delete
+                        </button>
+                    </td>
+                }
             </tr>
         }
     </tbody>
 </table>
 
 @code {
-    // Placeholder stats for now
-    int totalTasks = 10;
-    int completedTasks = 6;
-    int pendingTasks => totalTasks - completedTasks;
+    private TaskItem? editingTask = null;
+    private TaskItem tempTask = new();
 
-    // Placeholder recent tasks
-    List<TaskItem> recentTasks = new List<TaskItem>
+    void ToggleDone(TaskItem task)
     {
-        new TaskItem { Title = "Finish Login UI", IsDone = true, DueDate = DateTime.Today.AddDays(-1) },
-        new TaskItem { Title = "Create Dashboard Page", IsDone = false, DueDate = DateTime.Today },
-        new TaskItem { Title = "Setup NavMenu Links", IsDone = true, DueDate = DateTime.Today.AddDays(-2) }
-    };
+        TaskService.ToggleDone(task);
+    }
 
-    class TaskItem
+    void DeleteTask(TaskItem task)
     {
-        public string Title { get; set; }
-        public bool IsDone { get; set; }
-        public DateTime DueDate { get; set; }
+        TaskService.RemoveTask(task);
+    }
+
+    void StartEdit(TaskItem task)
+    {
+        editingTask = task;
+
+        // Copy values so cancel works properly
+        tempTask = new TaskItem
+        {
+            Title = task.Title,
+            AssignedTo = task.AssignedTo,
+            DueDate = task.DueDate,
+            Notes = task.Notes,
+            IsDone = task.IsDone
+        };
+    }
+
+    void SaveEdit()
+    {
+        if (editingTask != null)
+        {
+            editingTask.Title = tempTask.Title;
+            editingTask.AssignedTo = tempTask.AssignedTo;
+            editingTask.DueDate = tempTask.DueDate;
+            editingTask.Notes = tempTask.Notes;
+
+            editingTask = null;
+        }
+    }
+
+    void CancelEdit()
+    {
+        editingTask = null;
+    }
+
+    void GoToAddTask()
+    {
+        Navigation.NavigateTo("/add-task");
     }
 }
