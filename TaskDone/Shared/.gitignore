@@ -1,0 +1,16 @@
+# Ignore build outputs
+bin/
+obj/
+
+# .NET / Blazor
+bin/
+obj/
+*.user
+*.vs/
+*.suo
+*.pdb
+*.exe
+*.dll
+*.cache
+*.slnx
+

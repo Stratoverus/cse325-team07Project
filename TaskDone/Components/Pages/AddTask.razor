@@ -1,0 +1,90 @@
+@page "/add-task"
+@rendermode InteractiveServer
+@inject TaskDone.Services.TaskService TaskService
+
+<h3>Add New Task</h3>
+
+<EditForm Model="@newTask" OnValidSubmit="HandleValidSubmit" FormName="AddTaskForm">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="mb-3">
+        <label class="form-label">Title</label>
+        <InputText class="form-control" @bind-Value="newTask.Title" />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Assigned To</label>
+        <InputText class="form-control" @bind-Value="newTask.AssignedTo" />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Due Date</label>
+        <InputDate class="form-control" @bind-Value="newTask.DueDate" />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Notes</label>
+        <InputTextArea class="form-control" @bind-Value="newTask.Notes" rows="3" />
+    </div>
+
+    <div class="mb-3">
+        <button type="submit" class="btn btn-primary">Add Task</button>
+        <button type="button" class="btn btn-outline-secondary ms-2" @onclick="ClearForm">Clear Form</button>
+        <span class="ms-3 text-success">@message</span>
+    </div>
+</EditForm>
+
+<h4>Current Tasks</h4>
+<table class="table table-sm table-striped">
+    <thead>
+        <tr>
+            <th>Title</th>
+            <th>Assigned</th>
+            <th>Due</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var task in TaskService.AllTasks.OrderBy(t => t.DueDate))
+        {
+            <tr>
+                <td>@task.Title</td>
+                <td>@task.AssignedTo</td>
+                <td>@task.DueDate.ToShortDateString()</td>
+                <td>@(task.IsDone ? "Completed" : "Pending")</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private TaskDone.Models.TaskItem newTask = new() { DueDate = DateTime.Today };
+    private string message = string.Empty;
+
+    private void HandleValidSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(newTask.Title))
+        {
+            message = "Title is required.";
+            return;
+        }
+
+        if (newTask.DueDate < DateTime.Today)
+        {
+            message = "Due date must be today or later.";
+            return;
+        }
+
+        TaskService.AddTask(newTask);
+        message = "Task added!";
+
+        newTask = new TaskDone.Models.TaskItem { DueDate = DateTime.Today };
+    }
+
+    private void ClearForm()
+    {
+        newTask = new TaskDone.Models.TaskItem { DueDate = DateTime.Today };
+        message = string.Empty;
+    }
+}
