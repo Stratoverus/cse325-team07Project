@@ -1,0 +1,37 @@
+@page "/verify-email"
+@inject NavigationManager Navigation
+
+<PageTitle>Verify Email</PageTitle>
+
+<h3>Check Your Email</h3>
+
+<p>
+    We sent a verification link to <strong>@(string.IsNullOrWhiteSpace(email) ? "your email" : email)</strong>.
+</p>
+<p>
+    Open that message, verify your account, then sign in.
+</p>
+
+<div class="mt-3 d-flex gap-2">
+    <NavLink class="btn btn-primary" href="/login">Go to Login</NavLink>
+    <button class="btn btn-outline-secondary" @onclick="GoToSignup">Use a Different Email</button>
+</div>
+
+@code {
+    private string email = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+        if (query.TryGetValue("email", out var value))
+        {
+            email = value.ToString();
+        }
+    }
+
+    private void GoToSignup()
+    {
+        Navigation.NavigateTo("/signup");
+    }
+}

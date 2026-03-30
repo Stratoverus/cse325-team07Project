@@ -1,0 +1,284 @@
+@page "/profile"
+@page "/profile/{UserId}"
+@rendermode InteractiveServer
+@inject TaskDone.Services.SupabaseAuthService AuthService
+@inject TaskDone.Services.UserProfileService ProfileService
+@inject NavigationManager Navigation
+
+<PageTitle>Profile</PageTitle>
+
+<h3>Your Profile</h3>
+
+<ErrorBoundary>
+    <ChildContent>
+        @if (!AuthService.IsAuthenticated)
+        {
+            <div class="alert alert-warning" role="alert">
+                Please <NavLink href="@GetLoginLink()">log in</NavLink> to view your profile.
+            </div>
+        }
+        else if (!isLoaded)
+        {
+            <p>Loading your profile...</p>
+        }
+        else if (!string.IsNullOrWhiteSpace(loadError))
+        {
+            <div class="alert alert-danger" role="alert">
+                @loadError
+            </div>
+        }
+        else if (!isAuthorizedForRoute)
+        {
+            <div class="alert alert-danger" role="alert">
+                You are not authorized to view this profile.
+            </div>
+        }
+        else if (profile is null)
+        {
+            <div class="alert alert-warning" role="alert">
+                We could not load your profile details yet. Please refresh the page.
+            </div>
+        }
+        else if (!profile.IsFirstLoginComplete)
+        {
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">Welcome to TaskDone</h5>
+                    <p class="text-muted mb-4">Let's set up your profile so your family workspace is ready.</p>
+
+                    <EditForm Model="profile" OnValidSubmit="SaveProfileAsync" FormName="FirstLoginProfileForm">
+                        <DataAnnotationsValidator />
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Full Name</label>
+                                <InputText class="form-control" @bind-Value="profile.FullName" />
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label">Preferred Display Name</label>
+                                <InputText class="form-control" @bind-Value="profile.PreferredDisplayName" />
+                            </div>
+
+                            <div class="col-md-4">
+                                <label class="form-label">Age</label>
+                                <InputNumber class="form-control" @bind-Value="profile.Age" />
+                            </div>
+
+                            <div class="col-md-8">
+                                <label class="form-label">Time Zone</label>
+                                <InputSelect class="form-select" @bind-Value="profile.TimeZone">
+                                    @foreach (var tz in timeZoneOptions)
+                                    {
+                                        <option value="@tz.Id">@tz.Label</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                        </div>
+
+                        <div class="mt-4">
+                            <button type="submit" class="btn btn-primary">Save Profile</button>
+                        </div>
+                    </EditForm>
+
+                    @if (!string.IsNullOrWhiteSpace(profileMessage))
+                    {
+                        <p class="mt-3 text-success">@profileMessage</p>
+                    }
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="d-grid gap-3">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h5 class="card-title mb-1">Welcome, @GetWelcomeName()</h5>
+                                <p class="text-muted mb-0">Manage your account and family workspace from here.</p>
+                            </div>
+                            <NavLink class="btn btn-outline-secondary btn-sm" href="/account-settings">
+                                Account Settings
+                            </NavLink>
+                        </div>
+
+                        <hr />
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p class="mb-1"><strong>Email:</strong> @profile.Email</p>
+                                <p class="mb-1"><strong>Display Name:</strong> @GetWelcomeName()</p>
+                                <p class="mb-0"><strong>Time Zone:</strong> @profile.TimeZone</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p class="mb-0"><strong>Age:</strong> @(profile.Age?.ToString() ?? "Not set")</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Family Setup</h5>
+                        <p class="text-muted">Start by creating your family or joining one you've been invited to.</p>
+                        <div class="d-flex justify-content-center gap-2">
+                            <button type="button" class="btn btn-primary" @onclick="ShowCreateFamilyPlaceholder">Create a Family</button>
+                            <button type="button" class="btn btn-outline-primary" @onclick="ShowJoinFamilyPlaceholder">Join a Family</button>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(familyMessage))
+                        {
+                            <p class="mt-3 text-muted">@familyMessage</p>
+                        }
+                    </div>
+                </div>
+
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title">Getting Started</h5>
+                        <ul class="mb-0">
+                            <li>Create or join your family group.</li>
+                            <li>Add your first household tasks.</li>
+                            <li>Invite the other parent and your kids.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        }
+    </ChildContent>
+    <ErrorContent Context="ex">
+        <div class="alert alert-danger" role="alert">
+            Profile page failed to render: @ex.Message
+        </div>
+    </ErrorContent>
+</ErrorBoundary>
+
+@code {
+    [Parameter] public string? UserId { get; set; }
+
+    private TaskDone.Models.UserProfile? profile;
+    private bool isLoaded;
+    private bool isAuthorizedForRoute;
+    private string profileMessage = string.Empty;
+    private string familyMessage = string.Empty;
+    private string loadError = string.Empty;
+    private readonly IReadOnlyList<TimeZoneOption> timeZoneOptions = BuildTimeZoneOptions();
+
+    protected override void OnParametersSet()
+    {
+        loadError = string.Empty;
+
+        try
+        {
+            var currentUserId = AuthService.CurrentUserId;
+            var currentEmail = AuthService.CurrentUserEmail ?? string.Empty;
+            var routeUserId = string.IsNullOrWhiteSpace(UserId) ? currentUserId : UserId;
+
+            isAuthorizedForRoute = !string.IsNullOrWhiteSpace(currentUserId) &&
+                string.Equals(routeUserId, currentUserId, StringComparison.Ordinal);
+
+            if (isAuthorizedForRoute && !string.IsNullOrWhiteSpace(currentUserId))
+            {
+                profile = ProfileService.EnsureDraftProfile(currentUserId, currentEmail);
+            }
+            else
+            {
+                profile = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            profile = null;
+            isAuthorizedForRoute = false;
+            loadError = $"Profile failed to load: {ex.Message}";
+        }
+
+        isLoaded = true;
+    }
+
+    private Task SaveProfileAsync()
+    {
+        if (profile is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (string.IsNullOrWhiteSpace(profile.FullName))
+        {
+            profileMessage = "Please add your full name before saving.";
+            return Task.CompletedTask;
+        }
+
+        if (string.IsNullOrWhiteSpace(profile.PreferredDisplayName))
+        {
+            profile.PreferredDisplayName = profile.FullName;
+        }
+
+        if (string.IsNullOrWhiteSpace(profile.TimeZone))
+        {
+            profile.TimeZone = TimeZoneInfo.Local.Id;
+        }
+
+        profile.IsFirstLoginComplete = true;
+        ProfileService.SaveProfile(profile);
+        profileMessage = "Profile saved. You are ready to set up your family.";
+        return Task.CompletedTask;
+    }
+
+    private void ShowCreateFamilyPlaceholder()
+    {
+        familyMessage = "Family creation will be available from this section.";
+    }
+
+    private void ShowJoinFamilyPlaceholder()
+    {
+        familyMessage = "Family invite and join options will appear here.";
+    }
+
+    private string GetWelcomeName()
+    {
+        if (profile is null)
+        {
+            return "there";
+        }
+
+        if (!string.IsNullOrWhiteSpace(profile.PreferredDisplayName))
+        {
+            return profile.PreferredDisplayName;
+        }
+
+        if (!string.IsNullOrWhiteSpace(profile.FullName))
+        {
+            return profile.FullName;
+        }
+
+        return profile.Email;
+    }
+
+    private string GetLoginLink()
+    {
+        var uri = Navigation.ToBaseRelativePath(Navigation.Uri);
+        var returnUrl = string.IsNullOrWhiteSpace(uri) ? "/profile" : $"/{uri}";
+        return $"/login?returnUrl={Uri.EscapeDataString(returnUrl)}";
+    }
+
+    private static IReadOnlyList<TimeZoneOption> BuildTimeZoneOptions()
+    {
+        var nowUtc = DateTime.UtcNow;
+
+        return TimeZoneInfo.GetSystemTimeZones()
+            .Select(tz =>
+            {
+                var offset = tz.GetUtcOffset(nowUtc);
+                var sign = offset < TimeSpan.Zero ? "-" : "+";
+                var absolute = offset.Duration();
+                var label = $"(UTC{sign}{absolute.Hours:D2}:{absolute.Minutes:D2}) {tz.DisplayName}";
+
+                return new TimeZoneOption(tz.Id, label);
+            })
+            .OrderBy(x => x.Label)
+            .ToList();
+    }
+
+    private sealed record TimeZoneOption(string Id, string Label);
+}

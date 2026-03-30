@@ -1,9 +1,18 @@
 @page "/add-task"
 @rendermode InteractiveServer
 @inject TaskDone.Services.TaskService TaskService
+@inject TaskDone.Services.SupabaseAuthService AuthService
 
 <h3>Add New Task</h3>
 
+@if (!AuthService.IsAuthenticated)
+{
+    <div class="alert alert-warning" role="alert">
+        Please <NavLink href="/login?returnUrl=%2Fadd-task">log in</NavLink> to add or view tasks.
+    </div>
+}
+else
+{
 <EditForm Model="@newTask" OnValidSubmit="HandleValidSubmit" FormName="AddTaskForm">
     <DataAnnotationsValidator />
     <ValidationSummary />
@@ -57,6 +66,7 @@
         }
     </tbody>
 </table>
+}
 
 @code {
     private TaskDone.Models.TaskItem newTask = new() { DueDate = DateTime.Today };
