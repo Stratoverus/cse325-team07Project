@@ -7,9 +7,18 @@
 
 @inject TaskService TaskService
 @inject NavigationManager Navigation
+@inject TaskDone.Services.SupabaseAuthService AuthService
 
 <h3>Dashboard</h3>
 
+@if (!AuthService.IsAuthenticated)
+{
+    <div class="alert alert-warning" role="alert">
+        Please <NavLink href="/login?returnUrl=%2Fdashboard">log in</NavLink> to view the dashboard.
+    </div>
+}
+else
+{
 <div class="mb-3">
     <NavLink class="btn btn-success" href="/add-task">Add New Task</NavLink>
 </div>
@@ -102,6 +111,7 @@
         }
     </tbody>
 </table>
+}
 
 @code {
     private TaskItem? editingTask = null;
