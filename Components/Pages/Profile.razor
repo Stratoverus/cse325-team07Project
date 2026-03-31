@@ -124,7 +124,7 @@
                         <p class="text-muted">Start by creating your family or joining one you've been invited to.</p>
                         <div class="d-flex justify-content-center gap-2">
                             <button type="button" class="btn btn-primary" @onclick="ShowCreateFamilyPlaceholder">Create a Family</button>
-                            <button type="button" class="btn btn-outline-primary" @onclick="ShowJoinFamilyPlaceholder">Join a Family</button>
+                            <button type="button" class="btn btn-outline-primary" @onclick="OpenModal">Join a Family</button>
                         </div>
                         @if (!string.IsNullOrWhiteSpace(familyMessage))
                         {
@@ -153,6 +153,28 @@
     </ErrorContent>
 </ErrorBoundary>
 
+@if (showModal)
+{
+    <div class="modal fade show" style="display: block; background: rgba(0,0,0,0.5);" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Join a Family</h5>
+                    <button type="button" class="btn-close" @onclick="CloseModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Enter a code to join a family.</p>
+                    <input type="text" class="form-control" placeholder="Enter Family Code" />
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseModal">Close</button>
+                    <button type="button" class="btn btn-primary">Join</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     [Parameter] public string? UserId { get; set; }
 
@@ -163,6 +185,10 @@
     private string familyMessage = string.Empty;
     private string loadError = string.Empty;
     private readonly IReadOnlyList<TimeZoneOption> timeZoneOptions = BuildTimeZoneOptions();
+
+    private bool showModal = false;
+    private void OpenModal() => showModal = true;
+    private void CloseModal() => showModal = false;
 
     protected override void OnParametersSet()
     {
