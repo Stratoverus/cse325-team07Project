@@ -164,22 +164,24 @@
     private string loadError = string.Empty;
     private readonly IReadOnlyList<TimeZoneOption> timeZoneOptions = BuildTimeZoneOptions();
 
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
         loadError = string.Empty;
+        isLoaded = false;
 
         try
         {
             var currentUserId = AuthService.CurrentUserId;
             var currentEmail = AuthService.CurrentUserEmail ?? string.Empty;
+            var accessToken = AuthService.CurrentSession?.AccessToken;
             var routeUserId = string.IsNullOrWhiteSpace(UserId) ? currentUserId : UserId;
 
             isAuthorizedForRoute = !string.IsNullOrWhiteSpace(currentUserId) &&
                 string.Equals(routeUserId, currentUserId, StringComparison.Ordinal);
 
-            if (isAuthorizedForRoute && !string.IsNullOrWhiteSpace(currentUserId))
+            if (isAuthorizedForRoute && !string.IsNullOrWhiteSpace(currentUserId) && !string.IsNullOrWhiteSpace(accessToken))
             {
-                profile = ProfileService.EnsureDraftProfile(currentUserId, currentEmail);
+                profile = await ProfileService.EnsureDraftProfileAsync(currentUserId, currentEmail, accessToken);
             }
             else
             {
@@ -196,17 +198,17 @@
         isLoaded = true;
     }
 
-    private Task SaveProfileAsync()
+    private async Task SaveProfileAsync()
     {
         if (profile is null)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         if (string.IsNullOrWhiteSpace(profile.FullName))
         {
             profileMessage = "Please add your full name before saving.";
-            return Task.CompletedTask;
+            return;
         }
 
         if (string.IsNullOrWhiteSpace(profile.PreferredDisplayName))
@@ -220,9 +222,15 @@
         }
 
         profile.IsFirstLoginComplete = true;
-        ProfileService.SaveProfile(profile);
+        var accessToken = AuthService.CurrentSession?.AccessToken;
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            profileMessage = "Your session expired. Please log in again.";
+            return;
+        }
+
+        profile = await ProfileService.SaveProfileAsync(profile, accessToken);
         profileMessage = "Profile saved. You are ready to set up your family.";
-        return Task.CompletedTask;
     }
 
     private void ShowCreateFamilyPlaceholder()

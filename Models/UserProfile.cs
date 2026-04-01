@@ -6,7 +6,6 @@ public sealed class UserProfile
     public string Email { get; set; } = string.Empty;
     public string FullName { get; set; } = string.Empty;
     public int? Age { get; set; }
-    public string RoleInFamily { get; set; } = "Parent";
     public string PreferredDisplayName { get; set; } = string.Empty;
     public string TimeZone { get; set; } = string.Empty;
     public bool IsFirstLoginComplete { get; set; }
