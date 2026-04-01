@@ -8,6 +8,7 @@
 @inject TaskService TaskService
 @inject NavigationManager Navigation
 @inject TaskDone.Services.SupabaseAuthService AuthService
+@inject TaskDone.Services.UserProfileService UserProfileService
 
 <h3>Dashboard</h3>
 
@@ -19,103 +20,154 @@
 }
 else
 {
-<div class="mb-3">
-    <NavLink class="btn btn-success" href="/add-task">Add New Task</NavLink>
-</div>
-
-<div class="row">
-    <div class="col-md-4">
-        <div class="card text-white bg-primary mb-3">
-            <div class="card-body">
-                <h5 class="card-title">Total Tasks</h5>
-                <p class="card-text">@TaskService.AllTasks.Count</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card text-white bg-success mb-3">
-            <div class="card-body">
-                <h5 class="card-title">Completed Tasks</h5>
-                <p class="card-text">@TaskService.AllTasks.Count(t => t.IsDone)</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card text-white bg-warning mb-3">
-            <div class="card-body">
-                <h5 class="card-title">Pending Tasks</h5>
-                <p class="card-text">@TaskService.AllTasks.Count(t => !t.IsDone)</p>
-            </div>
-        </div>
-    </div>
-</div>
-
-<h4>Recent Tasks</h4>
-<table class="table table-striped">
-    <thead>
-        <tr>
-            <th>Title</th>
-            <th>Assigned To</th>
-            <th>Status</th>
-            <th>Due Date</th>
-            <th>Actions</th>
-        </tr>
-    </thead>
-    <tbody>
-        @foreach (var task in TaskService.AllTasks.OrderBy(t => t.DueDate))
+    <div class="mb-3">
+        @if (!isChild)
         {
-            <tr>
-                @if (editingTask == task)
-                {
-                    <!-- EDIT MODE -->
-                    <td>
-                        <InputText class="form-control" @bind-Value="tempTask.Title" />
-                    </td>
-                    <td>
-                        <InputText class="form-control" @bind-Value="tempTask.AssignedTo" />
-                    </td>
-                    <td>@(task.IsDone ? "Completed" : "Pending")</td>
-                    <td>
-                        <InputDate class="form-control" @bind-Value="tempTask.DueDate" />
-                    </td>
-                    <td>
-                        <button class="btn btn-sm btn-success" @onclick="SaveEdit">Save</button>
-                        <button class="btn btn-sm btn-secondary ms-2" @onclick="CancelEdit">Cancel</button>
-                    </td>
-                }
-                else
-                {
-                    <!-- NORMAL MODE -->
-                    <td>@task.Title</td>
-                    <td>@task.AssignedTo</td>
-                    <td>@(task.IsDone ? "Completed" : "Pending")</td>
-                    <td>@task.DueDate.ToShortDateString()</td>
-                    <td>
-                        <button class="btn btn-sm btn-outline-secondary"
-                                @onclick="() => ToggleDone(task)">
-                            @(task.IsDone ? "Re-open" : "Complete")
-                        </button>
-
-                        <button class="btn btn-sm btn-outline-primary ms-2"
-                                @onclick="() => StartEdit(task)">
-                            Edit
-                        </button>
-
-                        <button class="btn btn-sm btn-outline-danger ms-2"
-                                @onclick="() => DeleteTask(task)">
-                            Delete
-                        </button>
-                    </td>
-                }
-            </tr>
+            <NavLink class="btn btn-success" href="/add-task">Add New Task</NavLink>
         }
-    </tbody>
-</table>
+    </div>
+
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card text-white bg-primary mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Total Tasks</h5>
+                    <p class="card-text">@visibleTasks.Count()</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-white bg-success mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Completed Tasks</h5>
+                    <p class="card-text">@visibleTasks.Count(t => t.IsDone)</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-white bg-warning mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Pending Tasks</h5>
+                    <p class="card-text">@visibleTasks.Count(t => !t.IsDone)</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <h4>@(isChild ? "My Tasks" : "Recent Tasks")</h4>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Assigned To</th>
+                <th>Status</th>
+                <th>Due Date</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var task in visibleTasks.OrderBy(t => t.DueDate))
+            {
+                <tr>
+                    @if (editingTask == task)
+                    {
+                        <td><InputText class="form-control" @bind-Value="tempTask.Title" /></td>
+                        <td><InputText class="form-control" @bind-Value="tempTask.AssignedTo" /></td>
+                        <td>@(task.IsDone ? "Completed" : "Pending")</td>
+                        <td><InputDate class="form-control" @bind-Value="tempTask.DueDate" /></td>
+                        <td>
+                            <button class="btn btn-sm btn-success" @onclick="SaveEdit">Save</button>
+                            <button class="btn btn-sm btn-secondary ms-2" @onclick="CancelEdit">Cancel</button>
+                        </td>
+                    }
+                    else
+                    {
+                        <td>@task.Title</td>
+                        <td>@task.AssignedTo</td>
+                        <td>
+                            @if (task.IsDone)
+                            {
+                                <span class="badge bg-success">Completed</span>
+                            }
+                            else if (task.AcceptedByChild)
+                            {
+                                <span class="badge bg-primary">In Progress</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">Pending</span>
+                            }
+                        </td>
+                        <td>@task.DueDate.ToShortDateString()</td>
+                        <td>
+                            @if (isChild)
+                            {
+                                @if (!task.AcceptedByChild)
+                                {
+                                    <button class="btn btn-sm btn-outline-primary"
+                                            @onclick="() => AcceptTask(task)">
+                                        Accept
+                                    </button>
+                                }
+                                else if (!task.IsDone)
+                                {
+                                    <button class="btn btn-sm btn-outline-success"
+                                            @onclick="() => ToggleDone(task)">
+                                        Mark Complete
+                                    </button>
+                                }
+                                else
+                                {
+                                    <span class="text-success">Done</span>
+                                }
+                            }
+                            else
+                            {
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        @onclick="() => ToggleDone(task)">
+                                    @(task.IsDone ? "Re-open" : "Complete")
+                                </button>
+                                <button class="btn btn-sm btn-outline-primary ms-2"
+                                        @onclick="() => StartEdit(task)">
+                                    Edit
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger ms-2"
+                                        @onclick="() => DeleteTask(task)">
+                                    Delete
+                                </button>
+                            }
+                        </td>
+                    }
+                </tr>
+            }
+        </tbody>
+    </table>
 }
 
 @code {
     private TaskItem? editingTask = null;
     private TaskItem tempTask = new();
+    private bool isChild = false;
+    private string currentUserId = string.Empty;
+    private IEnumerable<TaskItem> visibleTasks = Enumerable.Empty<TaskItem>();
+
+    protected override void OnInitialized()
+    {
+        currentUserId = AuthService.CurrentUserId ?? string.Empty;
+
+        var profile = UserProfileService.GetProfile(currentUserId);
+        isChild = profile?.RoleInFamily == "Child";
+
+        // El hijo solo ve sus tareas; el padre ve todas
+        visibleTasks = isChild
+            ? TaskService.AllTasks.Where(t => t.AssignedTo == (profile?.FullName ?? string.Empty))
+            : TaskService.AllTasks;
+    }
+
+    void AcceptTask(TaskItem task)
+    {
+        task.AcceptedByChild = true;
+    }
 
     void ToggleDone(TaskItem task)
     {
@@ -130,8 +182,6 @@ else
     void StartEdit(TaskItem task)
     {
         editingTask = task;
-
-        // Copy values so cancel works properly
         tempTask = new TaskItem
         {
             Title = task.Title,
@@ -150,7 +200,6 @@ else
             editingTask.AssignedTo = tempTask.AssignedTo;
             editingTask.DueDate = tempTask.DueDate;
             editingTask.Notes = tempTask.Notes;
-
             editingTask = null;
         }
     }
@@ -158,10 +207,5 @@ else
     void CancelEdit()
     {
         editingTask = null;
-    }
-
-    void GoToAddTask()
-    {
-        Navigation.NavigateTo("/add-task");
     }
 }
