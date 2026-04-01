@@ -56,7 +56,7 @@ builder.Services.AddScoped(sp =>
 builder.Services.AddScoped<HttpClient>();
 builder.Services.AddScoped<SupabaseAuthService>();
 builder.Services.AddScoped<AuthenticationStateProvider, SupabaseAuthenticationStateProvider>();
-builder.Services.AddSingleton<UserProfileService>();
+builder.Services.AddScoped<UserProfileService>();
 
 builder.Services.AddSingleton<TaskDone.Services.TaskService>();
 
