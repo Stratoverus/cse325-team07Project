@@ -73,6 +73,7 @@ public sealed class SupabaseAuthService
         }
 
         CurrentSession = session;
+        await EnsureAppUserRecordAsync(session.User.Id, session.User.Email, session.AccessToken, cancellationToken);
         NotifyAuthStateChanged();
 
         _logger.LogInformation("Supabase login successful for {Email}", session.User?.Email ?? email);
@@ -159,6 +160,7 @@ public sealed class SupabaseAuthService
         if (!string.IsNullOrWhiteSpace(session?.AccessToken))
         {
             CurrentSession = session;
+            await EnsureAppUserRecordAsync(user.Id, user.Email, session.AccessToken, cancellationToken);
             NotifyAuthStateChanged();
             _logger.LogInformation("Supabase signup successful and session created for {Email}", email);
             return AuthResult.Success("Account created. You are now logged in.");
@@ -233,4 +235,61 @@ public sealed class SupabaseAuthService
         PropertyNameCaseInsensitive = true,
         NumberHandling = JsonNumberHandling.AllowReadingFromString
     };
+
+    private async Task EnsureAppUserRecordAsync(string userId, string email, string accessToken, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var endpoint = BuildEndpoint("/rest/v1/user_profiles?on_conflict=user_id");
+            var payload = new[]
+            {
+                new SupabaseProfileSeed
+                {
+                    UserId = userId,
+                    Email = email,
+                    TimeZone = TimeZoneInfo.Local.Id,
+                    IsFirstLoginComplete = false,
+                    UpdatedUtc = DateTime.UtcNow
+                }
+            };
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
+            {
+                Content = JsonContent.Create(payload)
+            };
+
+            request.Headers.Add("apikey", _options.AnonKey);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            request.Headers.TryAddWithoutValidation("Prefer", "resolution=merge-duplicates,return=minimal");
+
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogWarning("Unable to provision user_profiles row for {UserId}. Status: {StatusCode}. Body: {Body}", userId, (int)response.StatusCode, body);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to provision app user record for {UserId}", userId);
+        }
+    }
+
+    private sealed class SupabaseProfileSeed
+    {
+        [JsonPropertyName("user_id")]
+        public string UserId { get; set; } = string.Empty;
+
+        [JsonPropertyName("email")]
+        public string Email { get; set; } = string.Empty;
+
+        [JsonPropertyName("time_zone")]
+        public string TimeZone { get; set; } = string.Empty;
+
+        [JsonPropertyName("is_first_login_complete")]
+        public bool IsFirstLoginComplete { get; set; }
+
+        [JsonPropertyName("updated_utc")]
+        public DateTime UpdatedUtc { get; set; }
+    }
 }
