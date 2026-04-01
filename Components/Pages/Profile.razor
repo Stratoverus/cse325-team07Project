@@ -4,6 +4,7 @@
 @inject TaskDone.Services.SupabaseAuthService AuthService
 @inject TaskDone.Services.UserProfileService ProfileService
 @inject NavigationManager Navigation
+@inject Supabase.Client SupabaseClient
 
 <PageTitle>Profile</PageTitle>
 
@@ -123,7 +124,7 @@
                         <h5 class="card-title">Family Setup</h5>
                         <p class="text-muted">Start by creating your family or joining one you've been invited to.</p>
                         <div class="d-flex justify-content-center gap-2">
-                            <button type="button" class="btn btn-primary" @onclick="ShowCreateFamilyPlaceholder">Create a Family</button>
+                            <button type="button" class="btn btn-primary" @onclick="OpenCreateFamForm">Create a Family</button>
                             <button type="button" class="btn btn-outline-primary" @onclick="OpenModal">Join a Family</button>
                         </div>
                         @if (!string.IsNullOrWhiteSpace(familyMessage))
@@ -153,6 +154,8 @@
     </ErrorContent>
 </ErrorBoundary>
 
+@* Join a Family Modal *@
+
 @if (showModal)
 {
     <div class="modal fade show" style="display: block; background: rgba(0,0,0,0.5);" tabindex="-1">
@@ -175,6 +178,46 @@
     </div>
 }
 
+@* Create a Family Form *@
+
+@if (showCreateFamForm) {
+    <div class="modal fade show" style="display: block; background: rgba(0,0,0,0.5);" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content shadow-lg">
+                <div class="modal-header">
+                    <h5 class="modal-title">Create a Family</h5>
+                    <button type="button" class="btn-close" @onclick="CloseCreateFamForm"></button>
+                </div>
+                
+                @* Cambiamos el <form> por EditForm para conectarlo a HandleCreateFamilyAsync *@
+                <EditForm Model="newFamily" OnValidSubmit="HandleCreateFamilyAsync">
+                    <div class="modal-body">
+                        <p class="text-muted">Set up a new family group.</p>
+                        <div class="mb-3">
+                            <label class="form-label font-weight-bold">Family Name</label>
+                            @* Vinculamos el input a la propiedad FamilyName de tu modelo *@
+                            <InputText class="form-control" @bind-Value="newFamily.FamilyName" placeholder="e.g. The Smith Family" />
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseCreateFamForm">Cancel</button>
+                        @* Agregamos un spinner visual mientras se guarda *@
+                        <button type="submit" class="btn btn-success" disabled="@isCreatingFamily">
+                            @if (isCreatingFamily) {
+                                <span class="spinner-border spinner-border-sm"></span>
+                                <span> Creating...</span>
+                            } else {
+                                <span>Create Family</span>
+                            }
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     [Parameter] public string? UserId { get; set; }
 
@@ -189,6 +232,12 @@
     private bool showModal = false;
     private void OpenModal() => showModal = true;
     private void CloseModal() => showModal = false;
+    private bool showCreateFamForm = false;
+    private void OpenCreateFamForm() => showCreateFamForm = true;
+    private void CloseCreateFamForm() => showCreateFamForm = false;
+
+    private TaskDone.Models.Family newFamily = new();
+    private bool isCreatingFamily = false;
 
     protected override void OnParametersSet()
     {
@@ -307,4 +356,44 @@
     }
 
     private sealed record TimeZoneOption(string Id, string Label);
+
+    private async Task HandleCreateFamilyAsync()
+    {
+        if (string.IsNullOrWhiteSpace(newFamily.FamilyName))
+        {
+            familyMessage = "Please enter a family name.";
+            return;
+        }
+
+        isCreatingFamily = true;
+        try
+        {
+            var currentUserId = AuthService.CurrentUserId;
+            
+            if (!string.IsNullOrWhiteSpace(currentUserId))
+            {
+                
+                newFamily.CreatedBy = currentUserId;
+                newFamily.CreatedAt = DateTime.UtcNow;
+                newFamily.UpdatedAt = DateTime.UtcNow;
+
+                
+                await SupabaseClient.From<TaskDone.Models.Family>().Insert(newFamily);
+
+                familyMessage = $"Family '{newFamily.FamilyName}' created successfully!";
+                
+                
+                newFamily = new(); 
+                CloseCreateFamForm();
+            }
+        }
+        catch (Exception ex)
+        {
+            familyMessage = $"Error creating family: {ex.Message}";
+        }
+        finally
+        {
+            isCreatingFamily = false;
+        }
+    }
 }
