@@ -41,6 +41,18 @@ builder.Services.AddOptions<SupabaseOptions>()
         }
     });
 
+builder.Services.AddScoped(sp =>
+{
+
+    var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<SupabaseOptions>>().Value;
+    
+    return new Supabase.Client(
+        options.Url, 
+        options.AnonKey, 
+        new Supabase.SupabaseOptions { AutoConnectRealtime = true }
+    );
+});
+
 builder.Services.AddScoped<HttpClient>();
 builder.Services.AddScoped<SupabaseAuthService>();
 builder.Services.AddScoped<AuthenticationStateProvider, SupabaseAuthenticationStateProvider>();
