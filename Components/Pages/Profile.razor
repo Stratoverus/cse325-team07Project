@@ -239,7 +239,6 @@
     private TaskDone.Models.Family newFamily = new();
     private bool isCreatingFamily = false;
 
-    protected override void OnParametersSet()
     protected override async Task OnParametersSetAsync()
     {
         loadError = string.Empty;
