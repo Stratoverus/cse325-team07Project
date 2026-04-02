@@ -8,7 +8,6 @@
 @inject TaskService TaskService
 @inject NavigationManager Navigation
 @inject TaskDone.Services.SupabaseAuthService AuthService
-@inject TaskDone.Services.UserProfileService UserProfileService
 
 <h3>Dashboard</h3>
 
@@ -21,10 +20,7 @@
 else
 {
     <div class="mb-3">
-        @if (!isChild)
-        {
-            <NavLink class="btn btn-success" href="/add-task">Add New Task</NavLink>
-        }
+        <NavLink class="btn btn-success" href="/add-task">Add New Task</NavLink>
     </div>
 
     <div class="row">
@@ -54,7 +50,7 @@ else
         </div>
     </div>
 
-    <h4>@(isChild ? "My Tasks" : "Recent Tasks")</h4>
+    <h4>Recent Tasks</h4>
     <table class="table table-striped">
         <thead>
             <tr>
@@ -100,32 +96,22 @@ else
                         </td>
                         <td>@task.DueDate.ToShortDateString()</td>
                         <td>
-                            @if (isChild)
+                            @if (!task.AcceptedByChild)
                             {
-                                @if (!task.AcceptedByChild)
-                                {
-                                    <button class="btn btn-sm btn-outline-primary"
-                                            @onclick="() => AcceptTask(task)">
-                                        Accept
-                                    </button>
-                                }
-                                else if (!task.IsDone)
-                                {
-                                    <button class="btn btn-sm btn-outline-success"
-                                            @onclick="() => ToggleDone(task)">
-                                        Mark Complete
-                                    </button>
-                                }
-                                else
-                                {
-                                    <span class="text-success">Done</span>
-                                }
+                                <button class="btn btn-sm btn-outline-primary"
+                                        @onclick="() => AcceptTask(task)">
+                                    Accept
+                                </button>
                             }
-                            else
+                            else if (!task.IsDone)
                             {
-                                <button class="btn btn-sm btn-outline-secondary"
+                                <button class="btn btn-sm btn-outline-success"
                                         @onclick="() => ToggleDone(task)">
-                                    @(task.IsDone ? "Re-open" : "Complete")
+                                    Mark Complete
+                                </button>
+                                <button class="btn btn-sm btn-outline-warning ms-2"
+                                        @onclick="() => StartUpdateNotes(task)">
+                                    Update Notes
                                 </button>
                                 <button class="btn btn-sm btn-outline-primary ms-2"
                                         @onclick="() => StartEdit(task)">
@@ -136,32 +122,43 @@ else
                                     Delete
                                 </button>
                             }
+                            else
+                            {
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        @onclick="() => ToggleDone(task)">
+                                    Re-open
+                                </button>
+                            }
                         </td>
                     }
                 </tr>
             }
         </tbody>
     </table>
+@if (updatingNotesTask != null)
+{
+<div class="card mt-3 border-warning">
+<div class="card-body">
+<h6 class="card-title">Update notes — @updatingNotesTask.Title</h6>
+<textarea class="form-control mb-2" rows="3"
+@bind="updatingNotesTask.Notes"
+placeholder="Add a progress note..."></textarea>
+<button class="btn btn-sm btn-warning" @onclick="SaveNotes">Save Notes</button>
+<button class="btn btn-sm btn-secondary ms-2" @onclick="CancelNotes">Cancel</button>
+</div>
+</div>
+}
 }
 
 @code {
     private TaskItem? editingTask = null;
     private TaskItem tempTask = new();
-    private bool isChild = false;
-    private string currentUserId = string.Empty;
     private IEnumerable<TaskItem> visibleTasks = Enumerable.Empty<TaskItem>();
+    private TaskItem? updatingNotesTask = null;
 
     protected override void OnInitialized()
     {
-        currentUserId = AuthService.CurrentUserId ?? string.Empty;
-
-        var profile = UserProfileService.GetProfile(currentUserId);
-        isChild = profile?.RoleInFamily == "Child";
-
-        // El hijo solo ve sus tareas; el padre ve todas
-        visibleTasks = isChild
-            ? TaskService.AllTasks.Where(t => t.AssignedTo == (profile?.FullName ?? string.Empty))
-            : TaskService.AllTasks;
+        visibleTasks = TaskService.AllTasks;
     }
 
     void AcceptTask(TaskItem task)
@@ -207,5 +204,19 @@ else
     void CancelEdit()
     {
         editingTask = null;
+    }
+    void StartUpdateNotes(TaskItem task)
+    {
+        updatingNotesTask = task;
+    }
+
+    void SaveNotes()
+    {
+        updatingNotesTask = null;
+    }
+
+    void CancelNotes()
+    {
+        updatingNotesTask = null;
     }
 }
