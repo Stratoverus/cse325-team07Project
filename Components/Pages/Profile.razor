@@ -377,22 +377,42 @@
         try
         {
             var currentUserId = AuthService.CurrentUserId;
-            
+
             if (!string.IsNullOrWhiteSpace(currentUserId))
             {
-                
                 newFamily.CreatedBy = currentUserId;
+                newFamily.FamilyCode = GenerateFamilyCode();
                 newFamily.CreatedAt = DateTime.UtcNow;
                 newFamily.UpdatedAt = DateTime.UtcNow;
 
-                
-                await SupabaseClient.From<TaskDone.Models.Family>().Insert(newFamily);
+                var familyResponse = await SupabaseClient
+                    .From<TaskDone.Models.Family>()
+                    .Insert(newFamily);
+
+                var createdFamily = familyResponse.Models.FirstOrDefault();
+
+                if (createdFamily is null)
+                {
+                    familyMessage = "Error: Family was not created correctly.";
+                    return;
+                }
+
+                var member = new TaskDone.Models.FamilyMember
+                {
+                    FamilyId  = createdFamily.FamilyId,
+                    UserId    = currentUserId,
+                    Role      = "parent",
+                    JoinedAt  = createdFamily.CreatedAt
+                };
+
+                await SupabaseClient
+                    .From<TaskDone.Models.FamilyMember>()
+                    .Insert(member);
 
                 familyMessage = $"Family '{newFamily.FamilyName}' created successfully!";
-                
-                
-                newFamily = new(); 
+                newFamily = new();
                 CloseCreateFamForm();
+                Navigation.NavigateTo("/dashboard");
             }
         }
         catch (Exception ex)
@@ -404,4 +424,15 @@
             isCreatingFamily = false;
         }
     }
+
+        private static string GenerateFamilyCode()
+    {
+        const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        var random = new Random();
+        return new string(Enumerable.Range(0, 6)
+            .Select(_ => chars[random.Next(chars.Length)])
+            .ToArray());
+    }
+
+    
 }

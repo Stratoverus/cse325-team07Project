@@ -25,4 +25,17 @@ public sealed class Family : BaseModel
     [Column("updated_at")]
     [JsonPropertyName("updated_at")]
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    
+    [Column("family_code")]
+    [JsonPropertyName("family_code")]
+    public string FamilyCode { get; set; } = GenerateCode();
+
+    private static string GenerateCode()
+    {
+        const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        var random = new Random();
+        return new string(Enumerable.Range(0, 6)
+            .Select(_ => chars[random.Next(chars.Length)])
+            .ToArray());
+    }
 }
