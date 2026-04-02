@@ -380,13 +380,11 @@
 
             if (!string.IsNullOrWhiteSpace(currentUserId))
             {
-                // 1. Preparar la familia
                 newFamily.CreatedBy = currentUserId;
                 newFamily.FamilyCode = GenerateFamilyCode();
                 newFamily.CreatedAt = DateTime.UtcNow;
                 newFamily.UpdatedAt = DateTime.UtcNow;
 
-                // 2. Insertar familia y obtener el registro creado (con su ID)
                 var familyResponse = await SupabaseClient
                     .From<TaskDone.Models.Family>()
                     .Insert(newFamily);
@@ -399,7 +397,6 @@
                     return;
                 }
 
-                // 3. Insertar al creador como miembro
                 var member = new TaskDone.Models.FamilyMember
                 {
                     FamilyId  = createdFamily.FamilyId,
