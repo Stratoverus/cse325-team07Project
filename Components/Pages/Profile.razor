@@ -158,21 +158,57 @@
 
 @if (showModal)
 {
-    <div class="modal fade show" style="display: block; background: rgba(0,0,0,0.5);" tabindex="-1">
-        <div class="modal-dialog">
+    <div class="modal fade show" style="display: block; background: rgba(0,0,0,0.5);" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
             <div class="modal-content">
+                
                 <div class="modal-header">
                     <h5 class="modal-title">Join a Family</h5>
-                    <button type="button" class="btn-close" @onclick="CloseModal"></button>
+                    <button type="button" class="btn-close" @onclick="CloseModal" aria-label="Close"></button>
                 </div>
+
                 <div class="modal-body">
-                    <p>Enter a code to join a family.</p>
-                    <input type="text" class="form-control" placeholder="Enter Family Code" />
+                    <p>Enter the 6-character code to join a family.</p>
+                    
+                    <input type="text"
+                           class="form-control"
+                           placeholder="e.g. A3K9MZ"
+                           maxlength="6"
+                           @bind="joinFamilyCode"
+                           @bind:event="oninput" />
+
+                    @if (!string.IsNullOrWhiteSpace(joinFamilyMessage))
+                    {
+                        <div class="mt-2 text-danger">
+                            <small>@joinFamilyMessage</small>
+                        </div>
+                    }
                 </div>
+
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" @onclick="CloseModal">Close</button>
-                    <button type="button" class="btn btn-primary">Join</button>
+                    <button type="button" 
+                            class="btn btn-secondary" 
+                            @onclick="CloseModal">
+                        Close
+                    </button>
+                    
+                    <button type="button" 
+                            class="btn btn-primary"
+                            @onclick="HandleJoinFamilyAsync"
+                            disabled="@(isJoiningFamily || string.IsNullOrEmpty(joinFamilyCode))">
+                        
+                        @if (isJoiningFamily)
+                        {
+                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                            <span> Joining...</span>
+                        }
+                        else
+                        {
+                            <span>Join Family</span>
+                        }
+                    </button>
                 </div>
+
             </div>
         </div>
     </div>
@@ -189,20 +225,19 @@
                     <button type="button" class="btn-close" @onclick="CloseCreateFamForm"></button>
                 </div>
                 
-                @* Cambiamos el <form> por EditForm para conectarlo a HandleCreateFamilyAsync *@
                 <EditForm Model="newFamily" OnValidSubmit="HandleCreateFamilyAsync">
                     <div class="modal-body">
                         <p class="text-muted">Set up a new family group.</p>
                         <div class="mb-3">
                             <label class="form-label font-weight-bold">Family Name</label>
-                            @* Vinculamos el input a la propiedad FamilyName de tu modelo *@
+
                             <InputText class="form-control" @bind-Value="newFamily.FamilyName" placeholder="e.g. The Smith Family" />
                         </div>
                     </div>
 
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" @onclick="CloseCreateFamForm">Cancel</button>
-                        @* Agregamos un spinner visual mientras se guarda *@
+
                         <button type="submit" class="btn btn-success" disabled="@isCreatingFamily">
                             @if (isCreatingFamily) {
                                 <span class="spinner-border spinner-border-sm"></span>
@@ -238,6 +273,10 @@
 
     private TaskDone.Models.Family newFamily = new();
     private bool isCreatingFamily = false;
+
+    private string joinFamilyCode = string.Empty;
+    private string joinFamilyMessage = string.Empty;
+    private bool isJoiningFamily = false;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -434,5 +473,76 @@
             .ToArray());
     }
 
-    
+        private async Task HandleJoinFamilyAsync()
+    {
+        if (string.IsNullOrWhiteSpace(joinFamilyCode))
+        {
+            joinFamilyMessage = "Please enter a family code.";
+            return;
+        }
+
+        isJoiningFamily = true;
+        joinFamilyMessage = string.Empty;
+
+        try
+        {
+            var currentUserId = AuthService.CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(currentUserId))
+            {
+                joinFamilyMessage = "You must be logged in to join a family.";
+                return;
+            }
+
+            var familyResponse = await SupabaseClient
+                .From<TaskDone.Models.Family>()
+                .Filter("family_code", Postgrest.Constants.Operator.Equals, joinFamilyCode.Trim().ToUpper())
+                .Get();
+
+            var family = familyResponse.Models.FirstOrDefault();
+
+            if (family is null)
+            {
+                joinFamilyMessage = "No family found with that code. Please check and try again.";
+                return;
+            }
+
+            var existingResponse = await SupabaseClient
+                .From<TaskDone.Models.FamilyMember>()
+                .Filter("family_id", Postgrest.Constants.Operator.Equals, family.FamilyId)
+                .Filter("user_id", Postgrest.Constants.Operator.Equals, currentUserId)
+                .Get();
+
+            if (existingResponse.Models.Any())
+            {
+                joinFamilyMessage = "You are already a member of this family.";
+                return;
+            }
+
+            var member = new TaskDone.Models.FamilyMember
+            {
+                FamilyId = family.FamilyId,
+                UserId   = currentUserId,
+                Role     = "child",
+                JoinedAt = DateTime.UtcNow
+            };
+
+            await SupabaseClient
+                .From<TaskDone.Models.FamilyMember>()
+                .Insert(member);
+
+            CloseModal();
+            Navigation.NavigateTo("/dashboard");
+        }
+        catch (Exception ex)
+        {
+            joinFamilyMessage = $"Error joining family: {ex.Message}";
+        }
+        finally
+        {
+            isJoiningFamily = false;
+        }
+    }
+
+
 }
