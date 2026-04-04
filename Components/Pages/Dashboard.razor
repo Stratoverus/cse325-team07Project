@@ -8,6 +8,7 @@
 @inject TaskService TaskService
 @inject NavigationManager Navigation
 @inject TaskDone.Services.SupabaseAuthService AuthService
+@inject TaskDone.Services.UserProfileService UserProfileService
 
 <h3>Dashboard</h3>
 
@@ -50,6 +51,19 @@ else
         </div>
     </div>
 
+    @if (currentProfile != null)
+    {
+        <div class="alert alert-info d-flex align-items-center justify-content-between mb-3">
+            <span>Points balance: <strong>@currentProfile.PointsBalance pts</strong></span>
+            <button class="btn btn-sm btn-warning" disabled>Redeem Points (coming soon)</button>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(pointsMessage))
+    {
+        <div class="alert alert-success">@pointsMessage</div>
+    }
+
     <h4>Recent Tasks</h4>
     <table class="table table-striped">
         <thead>
@@ -67,10 +81,16 @@ else
                 <tr>
                     @if (editingTask == task)
                     {
-                        <td><InputText class="form-control" @bind-Value="tempTask.Title" /></td>
-                        <td><InputText class="form-control" @bind-Value="tempTask.AssignedTo" /></td>
+                        <td>
+                            <InputText class="form-control" @bind-Value="tempTask.Title" />
+                        </td>
+                        <td>
+                            <InputText class="form-control" @bind-Value="tempTask.AssignedTo" />
+                        </td>
                         <td>@(task.IsDone ? "Completed" : "Pending")</td>
-                        <td><InputDate class="form-control" @bind-Value="tempTask.DueDate" /></td>
+                        <td>
+                            <InputDate class="form-control" @bind-Value="tempTask.DueDate" />
+                        </td>
                         <td>
                             <button class="btn btn-sm btn-success" @onclick="SaveEdit">Save</button>
                             <button class="btn btn-sm btn-secondary ms-2" @onclick="CancelEdit">Cancel</button>
@@ -98,55 +118,48 @@ else
                         <td>
                             @if (!task.AcceptedByChild)
                             {
-                                <button class="btn btn-sm btn-outline-primary"
-                                        @onclick="() => AcceptTask(task)">
+                                <button class="btn btn-sm btn-outline-primary" @onclick="() => AcceptTask(task)">
                                     Accept
                                 </button>
                             }
                             else if (!task.IsDone)
                             {
-                                <button class="btn btn-sm btn-outline-success"
-                                        @onclick="() => ToggleDone(task)">
-                                    Mark Complete
-                                </button>
-                                <button class="btn btn-sm btn-outline-warning ms-2"
-                                        @onclick="() => StartUpdateNotes(task)">
-                                    Update Notes
-                                </button>
-                                <button class="btn btn-sm btn-outline-primary ms-2"
-                                        @onclick="() => StartEdit(task)">
-                                    Edit
-                                </button>
-                                <button class="btn btn-sm btn-outline-danger ms-2"
-                                        @onclick="() => DeleteTask(task)">
-                                    Delete
-                                </button>
-                            }
+                            <button class="btn btn-sm btn-outline-success" @onclick="() => MarkComplete(task)">
+                                Mark Complete
+                            </button>
+                            <button class="btn btn-sm btn-outline-warning ms-2" @onclick="() => StartUpdateNotes(task)">
+                                Update Notes
+                            </button>
+                            <button class="btn btn-sm btn-outline-primary ms-2" @onclick="() => StartEdit(task)">
+                                Edit
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger ms-2" @onclick="() => DeleteTask(task)">
+                                Delete
+                            </button>
+                        }
                             else
-                            {
-                                <button class="btn btn-sm btn-outline-secondary"
-                                        @onclick="() => ToggleDone(task)">
-                                    Re-open
-                                </button>
-                            }
-                        </td>
-                    }
-                </tr>
-            }
-        </tbody>
-    </table>
+                        {
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => ToggleDone(task)">
+                                Re-open
+                            </button>
+                        }
+                    </td>
+                }
+            </tr>
+        }
+    </tbody>
+</table>
 @if (updatingNotesTask != null)
 {
-<div class="card mt-3 border-warning">
-<div class="card-body">
-<h6 class="card-title">Update notes — @updatingNotesTask.Title</h6>
-<textarea class="form-control mb-2" rows="3"
-@bind="updatingNotesTask.Notes"
-placeholder="Add a progress note..."></textarea>
-<button class="btn btn-sm btn-warning" @onclick="SaveNotes">Save Notes</button>
-<button class="btn btn-sm btn-secondary ms-2" @onclick="CancelNotes">Cancel</button>
-</div>
-</div>
+    <div class="card mt-3 border-warning">
+        <div class="card-body">
+            <h6 class="card-title">Update notes — @updatingNotesTask.Title</h6>
+            <textarea class="form-control mb-2" rows="3" @bind="updatingNotesTask.Notes"
+                      placeholder="Add a progress note..."></textarea>
+            <button class="btn btn-sm btn-warning" @onclick="SaveNotes">Save Notes</button>
+            <button class="btn btn-sm btn-secondary ms-2" @onclick="CancelNotes">Cancel</button>
+        </div>
+    </div>
 }
 }
 
@@ -155,15 +168,42 @@ placeholder="Add a progress note..."></textarea>
     private TaskItem tempTask = new();
     private IEnumerable<TaskItem> visibleTasks = Enumerable.Empty<TaskItem>();
     private TaskItem? updatingNotesTask = null;
+    private UserProfile? currentProfile = null;
+    private string pointsMessage = string.Empty;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         visibleTasks = TaskService.AllTasks;
+
+        var userId = AuthService.CurrentUserId;
+        var token = AuthService.CurrentSession?.AccessToken;
+
+        if (!string.IsNullOrWhiteSpace(userId) && !string.IsNullOrWhiteSpace(token))
+        {
+            currentProfile = await UserProfileService.GetProfileAsync(userId, token);
+        }
     }
 
     void AcceptTask(TaskItem task)
     {
         task.AcceptedByChild = true;
+    }
+
+    async Task MarkComplete(TaskItem task)
+    {
+        TaskService.ToggleDone(task);
+
+        if (task.IsDone && currentProfile != null)
+        {
+            currentProfile.PointsBalance += task.PointValue;
+            var token = AuthService.CurrentSession?.AccessToken ?? string.Empty;
+            await UserProfileService.SaveProfileAsync(currentProfile, token);
+            pointsMessage = $"You earned {task.PointValue} points! Total: {currentProfile.PointsBalance}";
+        }
+        else
+        {
+            pointsMessage = string.Empty;
+        }
     }
 
     void ToggleDone(TaskItem task)
@@ -205,6 +245,7 @@ placeholder="Add a progress note..."></textarea>
     {
         editingTask = null;
     }
+
     void StartUpdateNotes(TaskItem task)
     {
         updatingNotesTask = task;

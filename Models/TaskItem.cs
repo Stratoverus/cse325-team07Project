@@ -8,4 +8,5 @@ public class TaskItem
     public bool IsDone { get; set; }
     public bool AcceptedByChild { get; set; }  
     public string? Notes { get; set; }
+    public int PointValue { get; set; } = 10;
 }

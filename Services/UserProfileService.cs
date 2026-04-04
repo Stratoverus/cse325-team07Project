@@ -116,6 +116,7 @@ public sealed class UserProfileService
         return new Uri($"{baseUrl}{relativePath}");
     }
 
+
     private static SupabaseUserProfileRow ToRow(UserProfile profile)
     {
         return new SupabaseUserProfileRow
@@ -127,6 +128,7 @@ public sealed class UserProfileService
             PreferredDisplayName = profile.PreferredDisplayName,
             TimeZone = profile.TimeZone,
             IsFirstLoginComplete = profile.IsFirstLoginComplete,
+            PointsBalance = profile.PointsBalance,
             CreatedUtc = profile.CreatedUtc,
             UpdatedUtc = profile.UpdatedUtc
         };
@@ -143,6 +145,7 @@ public sealed class UserProfileService
             PreferredDisplayName = row.PreferredDisplayName,
             TimeZone = row.TimeZone,
             IsFirstLoginComplete = row.IsFirstLoginComplete,
+            PointsBalance = row.PointsBalance,
             CreatedUtc = row.CreatedUtc,
             UpdatedUtc = row.UpdatedUtc
         };
@@ -154,32 +157,35 @@ public sealed class UserProfileService
     };
 
     private sealed class SupabaseUserProfileRow
-    {
-        [JsonPropertyName("user_id")]
-        public string UserId { get; set; } = string.Empty;
+{
+    [JsonPropertyName("user_id")]
+    public string UserId { get; set; } = string.Empty;
 
-        [JsonPropertyName("email")]
-        public string Email { get; set; } = string.Empty;
+    [JsonPropertyName("email")]
+    public string Email { get; set; } = string.Empty;
 
-        [JsonPropertyName("full_name")]
-        public string FullName { get; set; } = string.Empty;
+    [JsonPropertyName("full_name")]
+    public string FullName { get; set; } = string.Empty;
 
-        [JsonPropertyName("age")]
-        public int? Age { get; set; }
+    [JsonPropertyName("age")]
+    public int? Age { get; set; }
 
-        [JsonPropertyName("preferred_display_name")]
-        public string PreferredDisplayName { get; set; } = string.Empty;
+    [JsonPropertyName("preferred_display_name")]
+    public string PreferredDisplayName { get; set; } = string.Empty;
 
-        [JsonPropertyName("time_zone")]
-        public string TimeZone { get; set; } = string.Empty;
+    [JsonPropertyName("time_zone")]
+    public string TimeZone { get; set; } = string.Empty;
 
-        [JsonPropertyName("is_first_login_complete")]
-        public bool IsFirstLoginComplete { get; set; }
+    [JsonPropertyName("is_first_login_complete")]
+    public bool IsFirstLoginComplete { get; set; }
 
-        [JsonPropertyName("created_utc")]
-        public DateTime CreatedUtc { get; set; }
+    [JsonPropertyName("points_balance")]
+    public int PointsBalance { get; set; }
 
-        [JsonPropertyName("updated_utc")]
-        public DateTime UpdatedUtc { get; set; }
-    }
+    [JsonPropertyName("created_utc")]
+    public DateTime CreatedUtc { get; set; }
+
+    [JsonPropertyName("updated_utc")]
+    public DateTime UpdatedUtc { get; set; }
+}
 }
