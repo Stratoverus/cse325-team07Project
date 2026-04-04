@@ -1,0 +1,163 @@
+@page "/rewards"
+@rendermode InteractiveServer
+
+@using TaskDone.Services
+@using TaskDone.Models
+
+@inject TaskDone.Services.SupabaseAuthService AuthService
+@inject TaskDone.Services.UserProfileService UserProfileService
+@inject TaskDone.Services.RewardService RewardService
+
+<h3>Rewards</h3>
+
+@if (!AuthService.IsAuthenticated)
+{
+    <div class="alert alert-warning">
+        Please <NavLink href="/login?returnUrl=%2Frewards">log in</NavLink> to view rewards.
+    </div>
+}
+else
+{
+    @if (currentProfile != null)
+    {
+        <div class="alert alert-info mb-3">
+            Your points balance: <strong>@currentProfile.PointsBalance pts</strong>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(message))
+    {
+        <div class="alert alert-success">@message</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger">@errorMessage</div>
+    }
+
+    <h5>Add New Reward</h5>
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Name</label>
+                    <input class="form-control" @bind="newReward.Name" placeholder="e.g. Movie night" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Description</label>
+                    <input class="form-control" @bind="newReward.Description" placeholder="Optional" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Cost (pts)</label>
+                    <input class="form-control" type="number" @bind="newReward.CostPoints" />
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-primary w-100" @onclick="AddReward">Add Reward</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <h5>Available Rewards</h5>
+    @if (rewards.Count == 0)
+    {
+        <p class="text-muted">No rewards available yet.</p>
+    }
+    else
+    {
+        <div class="row">
+            @foreach (var reward in rewards)
+            {
+                <div class="col-md-4 mb-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="card-title">@reward.Name</h6>
+                            <p class="card-text text-muted">@reward.Description</p>
+                            <p class="card-text"><strong>@reward.CostPoints pts</strong></p>
+                            <button class="btn btn-warning btn-sm" @onclick="() => RedeemReward(reward)"
+                                    disabled="@(currentProfile == null || currentProfile.PointsBalance < reward.CostPoints)">
+                                @(currentProfile != null && currentProfile.PointsBalance >= reward.CostPoints
+                                    ? "Redeem"
+                                    : "Not enough points")
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    private UserProfile? currentProfile = null;
+    private List<Reward> rewards = new();
+    private Reward newReward = new() { CostPoints = 10 };
+    private string message = string.Empty;
+    private string errorMessage = string.Empty;
+    private string familyId = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var userId = AuthService.CurrentUserId;
+        var token = AuthService.CurrentSession?.AccessToken;
+
+        if (!string.IsNullOrWhiteSpace(userId) && !string.IsNullOrWhiteSpace(token))
+        {
+            currentProfile = await UserProfileService.GetProfileAsync(userId, token);
+            familyId = await RewardService.GetFamilyIdAsync(userId, token) ?? string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(familyId))
+            {
+                rewards = await RewardService.GetRewardsAsync(familyId, token);
+            }
+            else
+            {
+                errorMessage = "You are not part of a family yet. Create or join a family first.";
+            }
+        }
+    }
+
+    async Task AddReward()
+    {
+        message = string.Empty;
+        errorMessage = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(familyId))
+        {
+            errorMessage = "You need to be part of a family to add rewards.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(newReward.Name))
+        {
+            errorMessage = "Please enter a reward name.";
+            return;
+        }
+
+        var token = AuthService.CurrentSession?.AccessToken ?? string.Empty;
+        newReward.CreatedByUserId = AuthService.CurrentUserId ?? string.Empty;
+        newReward.FamilyId = familyId;
+
+        await RewardService.SaveRewardAsync(newReward, token);
+        rewards = await RewardService.GetRewardsAsync(familyId, token);
+        newReward = new Reward { CostPoints = 10 };
+        message = "Reward added successfully.";
+    }
+
+    async Task RedeemReward(Reward reward)
+    {
+        message = string.Empty;
+        errorMessage = string.Empty;
+
+        if (currentProfile == null || currentProfile.PointsBalance < reward.CostPoints)
+        {
+            errorMessage = "Not enough points to redeem this reward.";
+            return;
+        }
+
+        var token = AuthService.CurrentSession?.AccessToken ?? string.Empty;
+        currentProfile.PointsBalance -= reward.CostPoints;
+        await UserProfileService.SaveProfileAsync(currentProfile, token);
+        message = $"You redeemed '{reward.Name}' for {reward.CostPoints} pts! Remaining: {currentProfile.PointsBalance} pts";
+    }
+}
