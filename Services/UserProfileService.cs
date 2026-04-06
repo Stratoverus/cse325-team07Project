@@ -157,35 +157,35 @@ public sealed class UserProfileService
     };
 
     private sealed class SupabaseUserProfileRow
-{
-    [JsonPropertyName("user_id")]
-    public string UserId { get; set; } = string.Empty;
+    {
+        [JsonPropertyName("user_id")]
+        public string UserId { get; set; } = string.Empty;
 
-    [JsonPropertyName("email")]
-    public string Email { get; set; } = string.Empty;
+        [JsonPropertyName("email")]
+        public string Email { get; set; } = string.Empty;
 
-    [JsonPropertyName("full_name")]
-    public string FullName { get; set; } = string.Empty;
+        [JsonPropertyName("full_name")]
+        public string FullName { get; set; } = string.Empty;
 
-    [JsonPropertyName("age")]
-    public int? Age { get; set; }
+        [JsonPropertyName("age")]
+        public int? Age { get; set; }
 
-    [JsonPropertyName("preferred_display_name")]
-    public string PreferredDisplayName { get; set; } = string.Empty;
+        [JsonPropertyName("preferred_display_name")]
+        public string PreferredDisplayName { get; set; } = string.Empty;
 
-    [JsonPropertyName("time_zone")]
-    public string TimeZone { get; set; } = string.Empty;
+        [JsonPropertyName("time_zone")]
+        public string TimeZone { get; set; } = string.Empty;
 
-    [JsonPropertyName("is_first_login_complete")]
-    public bool IsFirstLoginComplete { get; set; }
+        [JsonPropertyName("is_first_login_complete")]
+        public bool IsFirstLoginComplete { get; set; }
 
-    [JsonPropertyName("points_balance")]
-    public int PointsBalance { get; set; }
+        [JsonPropertyName("points_balance")]
+        public int PointsBalance { get; set; }
 
-    [JsonPropertyName("created_utc")]
-    public DateTime CreatedUtc { get; set; }
+        [JsonPropertyName("created_utc")]
+        public DateTime CreatedUtc { get; set; }
 
-    [JsonPropertyName("updated_utc")]
-    public DateTime UpdatedUtc { get; set; }
-}
+        [JsonPropertyName("updated_utc")]
+        public DateTime UpdatedUtc { get; set; }
+    }
 }
