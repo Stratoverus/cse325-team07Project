@@ -10,6 +10,7 @@
 @inject NavigationManager Navigation
 @inject SupabaseAuthService AuthService
 @inject UserProfileService UserProfileService
+@inject RewardService RewardService
 
 <h3>Dashboard</h3>
 
@@ -200,6 +201,7 @@ else
     private string newAnnouncementMessage = string.Empty;
     private bool isPostingAnnouncement = false;
     private List<Announcement> announcements = new();
+    private string familyId = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -213,20 +215,25 @@ else
             visibleTasks = Enumerable.Empty<TaskItem>();
             announcements = new List<Announcement>();
             currentProfile = null;
+            familyId = string.Empty;
             return;
         }
 
-        currentProfile = await UserProfileService.GetProfileAsync(AuthService.CurrentUserId, AuthService.CurrentSession?.AccessToken ?? string.Empty);
+        var userId = AuthService.CurrentUserId;
+        var token = AuthService.CurrentSession?.AccessToken ?? string.Empty;
 
-        if (currentProfile == null || string.IsNullOrWhiteSpace(currentProfile.FamilyId))
+        currentProfile = await UserProfileService.GetProfileAsync(userId, token);
+        familyId = await RewardService.GetFamilyIdAsync(userId, token) ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(familyId))
         {
             visibleTasks = Enumerable.Empty<TaskItem>();
             announcements = new List<Announcement>();
             return;
         }
 
-        visibleTasks = TaskService.GetTasksByFamilyId(currentProfile.FamilyId);
-        announcements = await AnnouncementService.GetAnnouncementsByFamilyIdAsync(currentProfile.FamilyId);
+        visibleTasks = TaskService.GetTasksByFamilyId(familyId);
+        announcements = await AnnouncementService.GetAnnouncementsByFamilyIdAsync(familyId);
     }
 
     private async Task AcceptTask(TaskItem task)
@@ -337,7 +344,7 @@ else
         updatingNotesTask = null;
     }
 
-    private bool HasFamily => !string.IsNullOrWhiteSpace(currentProfile?.FamilyId);
+    private bool HasFamily => !string.IsNullOrWhiteSpace(familyId);
 
     private async Task PostAnnouncement()
     {
@@ -358,24 +365,19 @@ else
             return;
         }
 
-        if (currentProfile == null || string.IsNullOrWhiteSpace(currentProfile.FamilyId))
-        {
-            currentProfile = await UserProfileService.GetProfileAsync(AuthService.CurrentUserId ?? string.Empty, AuthService.CurrentSession?.AccessToken ?? string.Empty);
-        }
-
         if (!HasFamily || string.IsNullOrWhiteSpace(AuthService.CurrentUserId))
         {
             announcementMessage = "Error: You must be assigned to a family before posting announcements.";
             return;
         }
 
-        var familyId = currentProfile!.FamilyId;
+        var currentFamilyId = familyId;
         isPostingAnnouncement = true;
         try
         {
             var announcement = new Announcement
             {
-                FamilyId = familyId,
+                FamilyId = currentFamilyId,
                 Message = newAnnouncementMessage.Trim(),
                 CreatedBy = AuthService.CurrentUserId,
                 AnnouncementId = Guid.NewGuid().ToString(),

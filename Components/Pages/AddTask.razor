@@ -8,6 +8,7 @@
 @inject TaskService TaskService
 @inject SupabaseAuthService AuthService
 @inject UserProfileService UserProfileService
+@inject RewardService RewardService
 
 <h3>Add New Task</h3>
 
@@ -23,7 +24,7 @@ else if (currentProfile == null)
         Loading your profile...
     </div>
 }
-else if (string.IsNullOrWhiteSpace(currentProfile.FamilyId))
+else if (string.IsNullOrWhiteSpace(familyId))
 {
     <div class="alert alert-warning" role="alert">
         Unable to determine your family. Please update <NavLink href="/family-settings">Family Settings</NavLink>.
@@ -98,6 +99,7 @@ else
     private string message = string.Empty;
     private List<TaskItem> currentTasks = new();
     private UserProfile? currentProfile;
+    private string familyId = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -109,15 +111,20 @@ else
         if (string.IsNullOrWhiteSpace(AuthService.CurrentUserId))
         {
             currentProfile = null;
+            familyId = string.Empty;
             currentTasks = new List<TaskItem>();
             return;
         }
 
-        currentProfile = await UserProfileService.GetProfileAsync(AuthService.CurrentUserId, AuthService.CurrentSession?.AccessToken ?? string.Empty);
+        var userId = AuthService.CurrentUserId;
+        var token = AuthService.CurrentSession?.AccessToken ?? string.Empty;
 
-        if (!string.IsNullOrWhiteSpace(currentProfile?.FamilyId))
+        currentProfile = await UserProfileService.GetProfileAsync(userId, token);
+        familyId = await RewardService.GetFamilyIdAsync(userId, token) ?? string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(familyId))
         {
-            currentTasks = TaskService.GetTasksByFamilyId(currentProfile.FamilyId).ToList();
+            currentTasks = TaskService.GetTasksByFamilyId(familyId).ToList();
         }
         else
         {
@@ -139,13 +146,13 @@ else
             return;
         }
 
-        if (currentProfile?.FamilyId == null)
+        if (string.IsNullOrWhiteSpace(familyId))
         {
-            message = "Unable to determine family. Please check your profile.";
+            message = "Unable to determine family membership. Please join or create a family first.";
             return;
         }
 
-        newTask.FamilyId = currentProfile.FamilyId;
+        newTask.FamilyId = familyId;
         if (string.IsNullOrWhiteSpace(newTask.TaskId))
         {
             newTask.TaskId = Guid.NewGuid().ToString();
@@ -154,13 +161,13 @@ else
         TaskService.AddTask(newTask);
         message = "Task added!";
 
-        newTask = new TaskItem { DueDate = DateTime.Today, FamilyId = currentProfile.FamilyId };
+        newTask = new TaskItem { DueDate = DateTime.Today, FamilyId = familyId };
         await LoadTasksAsync();
     }
 
     private void ClearForm()
     {
-        newTask = new TaskItem { DueDate = DateTime.Today, FamilyId = currentProfile?.FamilyId ?? string.Empty };
+        newTask = new TaskItem { DueDate = DateTime.Today, FamilyId = familyId };
         message = string.Empty;
     }
 }
