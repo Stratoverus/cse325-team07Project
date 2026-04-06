@@ -1,7 +1,13 @@
 @page "/add-task"
 @rendermode InteractiveServer
-@inject TaskDone.Services.TaskService TaskService
-@inject TaskDone.Services.SupabaseAuthService AuthService
+
+@using System.Linq
+@using TaskDone.Models
+@using TaskDone.Services
+
+@inject TaskService TaskService
+@inject SupabaseAuthService AuthService
+@inject UserProfileService UserProfileService
 
 <h3>Add New Task</h3>
 
@@ -11,68 +17,115 @@
         Please <NavLink href="/login?returnUrl=%2Fadd-task">log in</NavLink> to add or view tasks.
     </div>
 }
+else if (currentProfile == null)
+{
+    <div class="alert alert-info" role="alert">
+        Loading your profile...
+    </div>
+}
+else if (string.IsNullOrWhiteSpace(currentProfile.FamilyId))
+{
+    <div class="alert alert-warning" role="alert">
+        Unable to determine your family. Please update <NavLink href="/family-settings">Family Settings</NavLink>.
+    </div>
+}
 else
 {
-<EditForm Model="@newTask" OnValidSubmit="HandleValidSubmit" FormName="AddTaskForm">
-    <DataAnnotationsValidator />
-    <ValidationSummary />
+    <EditForm Model="@newTask" OnValidSubmit="HandleValidSubmit" FormName="AddTaskForm">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
 
-    <div class="mb-3">
-        <label class="form-label">Title</label>
-        <InputText class="form-control" @bind-Value="newTask.Title" />
-    </div>
+        <div class="mb-3">
+            <label class="form-label">Title</label>
+            <InputText class="form-control" @bind-Value="newTask.Title" />
+        </div>
 
-    <div class="mb-3">
-        <label class="form-label">Assigned To</label>
-        <InputText class="form-control" @bind-Value="newTask.AssignedTo" />
-    </div>
+        <div class="mb-3">
+            <label class="form-label">Assigned To</label>
+            <InputText class="form-control" @bind-Value="newTask.AssignedTo" />
+        </div>
 
-    <div class="mb-3">
-        <label class="form-label">Due Date</label>
-        <InputDate class="form-control" @bind-Value="newTask.DueDate" />
-    </div>
+        <div class="mb-3">
+            <label class="form-label">Due Date</label>
+            <InputDate class="form-control" @bind-Value="newTask.DueDate" />
+        </div>
 
-    <div class="mb-3">
-        <label class="form-label">Notes</label>
-        <InputTextArea class="form-control" @bind-Value="newTask.Notes" rows="3" />
-    </div>
+        <div class="mb-3">
+            <label class="form-label">Notes</label>
+            <InputTextArea class="form-control" @bind-Value="newTask.Notes" rows="3" />
+        </div>
 
-    <div class="mb-3">
-        <button type="submit" class="btn btn-primary">Add Task</button>
-        <button type="button" class="btn btn-outline-secondary ms-2" @onclick="ClearForm">Clear Form</button>
-        <span class="ms-3 text-success">@message</span>
-    </div>
-</EditForm>
+        <div class="mb-3">
+            <button type="submit" class="btn btn-primary">Add Task</button>
+            <button type="button" class="btn btn-outline-secondary ms-2" @onclick="ClearForm">Clear Form</button>
+            <span class="ms-3 text-success">@message</span>
+        </div>
+    </EditForm>
 
-<h4>Current Tasks</h4>
-<table class="table table-sm table-striped">
-    <thead>
-        <tr>
-            <th>Title</th>
-            <th>Assigned</th>
-            <th>Due</th>
-            <th>Status</th>
-        </tr>
-    </thead>
-    <tbody>
-        @foreach (var task in TaskService.AllTasks.OrderBy(t => t.DueDate))
-        {
-            <tr>
-                <td>@task.Title</td>
-                <td>@task.AssignedTo</td>
-                <td>@task.DueDate.ToShortDateString()</td>
-                <td>@(task.IsDone ? "Completed" : "Pending")</td>
-            </tr>
-        }
-    </tbody>
-</table>
+    <h4 class="mt-4">Current Family Tasks</h4>
+    @if (!currentTasks.Any())
+    {
+        <div class="alert alert-secondary">No tasks have been added for your family yet.</div>
+    }
+    else
+    {
+        <table class="table table-sm table-striped">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Assigned</th>
+                    <th>Due</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var task in currentTasks.OrderBy(t => t.DueDate))
+                {
+                    <tr>
+                        <td>@task.Title</td>
+                        <td>@task.AssignedTo</td>
+                        <td>@task.DueDate?.ToShortDateString() ?? "No due date"</td>
+                        <td>@(task.IsDone ? "Completed" : "Pending")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
 }
 
 @code {
-    private TaskDone.Models.TaskItem newTask = new() { DueDate = DateTime.Today };
+    private TaskItem newTask = new() { DueDate = DateTime.Today };
     private string message = string.Empty;
+    private List<TaskItem> currentTasks = new();
+    private UserProfile? currentProfile;
 
-    private void HandleValidSubmit()
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTasksAsync();
+    }
+
+    private async Task LoadTasksAsync()
+    {
+        if (string.IsNullOrWhiteSpace(AuthService.CurrentUserId))
+        {
+            currentProfile = null;
+            currentTasks = new List<TaskItem>();
+            return;
+        }
+
+        currentProfile = await UserProfileService.GetProfileAsync(AuthService.CurrentUserId, AuthService.CurrentSession?.AccessToken ?? string.Empty);
+
+        if (!string.IsNullOrWhiteSpace(currentProfile?.FamilyId))
+        {
+            currentTasks = TaskService.GetTasksByFamilyId(currentProfile.FamilyId).ToList();
+        }
+        else
+        {
+            currentTasks = new List<TaskItem>();
+        }
+    }
+
+    private async Task HandleValidSubmit()
     {
         if (string.IsNullOrWhiteSpace(newTask.Title))
         {
@@ -86,15 +139,28 @@ else
             return;
         }
 
+        if (currentProfile?.FamilyId == null)
+        {
+            message = "Unable to determine family. Please check your profile.";
+            return;
+        }
+
+        newTask.FamilyId = currentProfile.FamilyId;
+        if (string.IsNullOrWhiteSpace(newTask.TaskId))
+        {
+            newTask.TaskId = Guid.NewGuid().ToString();
+        }
+
         TaskService.AddTask(newTask);
         message = "Task added!";
 
-        newTask = new TaskDone.Models.TaskItem { DueDate = DateTime.Today };
+        newTask = new TaskItem { DueDate = DateTime.Today, FamilyId = currentProfile.FamilyId };
+        await LoadTasksAsync();
     }
 
     private void ClearForm()
     {
-        newTask = new TaskDone.Models.TaskItem { DueDate = DateTime.Today };
+        newTask = new TaskItem { DueDate = DateTime.Today, FamilyId = currentProfile?.FamilyId ?? string.Empty };
         message = string.Empty;
     }
 }

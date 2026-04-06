@@ -59,6 +59,7 @@ builder.Services.AddScoped<AuthenticationStateProvider, SupabaseAuthenticationSt
 builder.Services.AddScoped<UserProfileService>();
 builder.Services.AddScoped<RewardService>();
 builder.Services.AddSingleton<TaskDone.Services.TaskService>();
+builder.Services.AddSingleton<AnnouncementService>();
 
 var app = builder.Build();
 
