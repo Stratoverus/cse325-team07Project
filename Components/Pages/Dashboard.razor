@@ -53,10 +53,10 @@ else
         </div>
     </div>
 
-    @if (currentProfile != null)
+    @if (currentFamilyMember != null)
     {
         <div class="alert alert-info d-flex align-items-center justify-content-between mb-3">
-            <span>Points balance: <strong>@currentProfile.PointsBalance pts</strong></span>
+            <span>Points balance: <strong>@currentFamilyMember.PointsBalance pts</strong></span>
             <NavLink class="btn btn-sm btn-warning" href="rewards">Redeem Points</NavLink>
         </div>
     }
@@ -202,6 +202,7 @@ else
     private bool isPostingAnnouncement = false;
     private List<Announcement> announcements = new();
     private string familyId = string.Empty;
+    private FamilyMember? currentFamilyMember = null;
 
     protected override async Task OnInitializedAsync()
     {
@@ -224,6 +225,7 @@ else
 
         currentProfile = await UserProfileService.GetProfileAsync(userId, token);
         familyId = await RewardService.GetFamilyIdAsync(userId, token) ?? string.Empty;
+        currentFamilyMember = await RewardService.GetFamilyMemberAsync(userId, token);
 
         if (string.IsNullOrWhiteSpace(familyId))
         {
@@ -253,11 +255,11 @@ else
 
         TaskService.ToggleDone(task);
 
-        if (task.IsDone && currentProfile != null)
+        if (task.IsDone && currentFamilyMember != null)
         {
-            currentProfile.PointsBalance += task.PointValue;
-            await UserProfileService.SaveProfileAsync(currentProfile, AuthService.CurrentSession?.AccessToken ?? string.Empty);
-            pointsMessage = $"You earned {task.PointValue} points! Total: {currentProfile.PointsBalance}";
+            currentFamilyMember.PointsBalance += task.PointValue;
+            await RewardService.UpdatePointsAsync(currentFamilyMember.FamilyMemberId, currentFamilyMember.PointsBalance, AuthService.CurrentSession?.AccessToken ?? string.Empty);
+            pointsMessage = $"You earned {task.PointValue} points! Total: {currentFamilyMember.PointsBalance}";
         }
         else
         {

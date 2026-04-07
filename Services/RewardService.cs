@@ -54,6 +54,27 @@ public sealed class RewardService
         public string FamilyId { get; set; } = string.Empty;
     }
 
+    public async Task<FamilyMember?> GetFamilyMemberAsync(string userId, string accessToken, CancellationToken cancellationToken = default)
+    {
+        var endpoint = BuildEndpoint($"/rest/v1/family_members?user_id=eq.{Uri.EscapeDataString(userId)}&select=*&limit=1");
+        using var request = CreateRequest(HttpMethod.Get, endpoint, accessToken);
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+            return null;
+
+        var rows = await response.Content.ReadFromJsonAsync<List<FamilyMember>>(JsonOptions, cancellationToken);
+        return rows?.Count > 0 ? rows[0] : null;
+    }
+
+    public async Task UpdatePointsAsync(string familyMemberId, int newBalance, string accessToken, CancellationToken cancellationToken = default)
+    {
+        var endpoint = BuildEndpoint($"/rest/v1/family_members?family_member_id=eq.{Uri.EscapeDataString(familyMemberId)}");
+        using var request = CreateRequest(HttpMethod.Patch, endpoint, accessToken);
+        request.Content = JsonContent.Create(new { points_balance = newBalance });
+        await _httpClient.SendAsync(request, cancellationToken);
+    }
+
     public async Task<Reward> SaveRewardAsync(Reward reward, string accessToken, CancellationToken cancellationToken = default)
     {
         var endpoint = BuildEndpoint("/rest/v1/rewards?on_conflict=reward_id");

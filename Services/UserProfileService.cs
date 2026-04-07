@@ -128,7 +128,6 @@ public sealed class UserProfileService
             PreferredDisplayName = profile.PreferredDisplayName,
             TimeZone = profile.TimeZone,
             IsFirstLoginComplete = profile.IsFirstLoginComplete,
-            PointsBalance = profile.PointsBalance,
             CreatedUtc = profile.CreatedUtc,
             UpdatedUtc = profile.UpdatedUtc
         };
@@ -145,7 +144,6 @@ public sealed class UserProfileService
             PreferredDisplayName = row.PreferredDisplayName,
             TimeZone = row.TimeZone,
             IsFirstLoginComplete = row.IsFirstLoginComplete,
-            PointsBalance = row.PointsBalance,
             CreatedUtc = row.CreatedUtc,
             UpdatedUtc = row.UpdatedUtc
         };
@@ -178,9 +176,6 @@ public sealed class UserProfileService
 
         [JsonPropertyName("is_first_login_complete")]
         public bool IsFirstLoginComplete { get; set; }
-
-        [JsonPropertyName("points_balance")]
-        public int PointsBalance { get; set; }
 
         [JsonPropertyName("created_utc")]
         public DateTime CreatedUtc { get; set; }
