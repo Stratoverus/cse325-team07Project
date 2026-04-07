@@ -1,48 +1,130 @@
+/* ============================
+   MainLayout.razor.css
+   Modernized UI
+   ============================ */
+
+/* ---------------------------
+   Root & Page
+--------------------------- */
 .page {
-    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    background-color: #f5f7fa; /* soft neutral background */
+}
+
+/* ---------------------------
+   Sidebar
+--------------------------- */
+.sidebar {
+    width: 250px;
+    height: 100vh;
+    position: sticky;
+    top: 0;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 1rem;
+    background-color: #1f2937; /* modern dark sidebar */
+    color: white;
+    box-shadow: 2px 0 8px rgba(0,0,0,0.08);
+    border-right: 1px solid #e5e7eb;
+}
+
+/* Sidebar links */
+.sidebar ::deep a {
+    color: white;
+    text-decoration: none;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    transition: background 0.2s, color 0.2s;
+}
+
+.sidebar ::deep a:hover {
+    background-color: #374151;
+}
+
+/* ---------------------------
+   Top Row
+--------------------------- */
+.top-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    height: 3.2rem;
+    padding: 0 1.5rem;
+    background-color: white;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+/* Links in top-row */
+.top-row ::deep a,
+.top-row ::deep .btn-link {
+    margin-left: 1.5rem;
+    white-space: nowrap;
+    text-decoration: none;
+    color: #4f46e5;
+    font-weight: 500;
+    transition: color 0.2s;
+}
+
+.top-row ::deep a:hover,
+.top-row ::deep .btn-link:hover {
+    color: #4338ca;
+}
+
+/* First link (e.g., About) overflow handling */
+.top-row ::deep a:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ---------------------------
+   Main & Content
+--------------------------- */
+main {
+    flex: 1;
     display: flex;
     flex-direction: column;
 }
 
-main {
-    flex: 1;
+/* Article content area */
+article.content {
+    padding: 2rem;
+    background-color: #f9fafb;
+    flex-grow: 1;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    margin-bottom: 1.5rem;
 }
 
-.sidebar {
-    background-image: linear-gradient(180deg, rgb(5, 39, 103) 0%, #3a0647 70%);
-}
-
-.top-row {
-    background-color: #f7f7f7;
-    border-bottom: 1px solid #d6d5d5;
-    justify-content: flex-end;
-    height: 3.5rem;
-    display: flex;
-    align-items: center;
-}
-
-    .top-row ::deep a, .top-row ::deep .btn-link {
-        white-space: nowrap;
-        margin-left: 1.5rem;
-        text-decoration: none;
-    }
-
-    .top-row ::deep a:hover, .top-row ::deep .btn-link:hover {
-        text-decoration: underline;
-    }
-
-    .top-row ::deep a:first-child {
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
+/* ---------------------------
+   Responsive Layout
+--------------------------- */
 @media (max-width: 640.98px) {
+    .page {
+        flex-direction: column;
+    }
+
     .top-row {
         justify-content: space-between;
     }
 
-    .top-row ::deep a, .top-row ::deep .btn-link {
+    .top-row ::deep a,
+    .top-row ::deep .btn-link {
         margin-left: 0;
+    }
+
+    .sidebar {
+        width: 100%;
+        height: auto;
+        position: relative;
+        box-shadow: none;
+        border-right: none;
     }
 }
 
@@ -51,48 +133,33 @@ main {
         flex-direction: row;
     }
 
-    .sidebar {
-        width: 250px;
-        height: 100vh;
-        position: sticky;
-        top: 0;
-    }
-
-    .top-row {
-        position: sticky;
-        top: 0;
-        z-index: 1;
-    }
-
-    .top-row.auth ::deep a:first-child {
-        flex: 1;
-        text-align: right;
-        width: 0;
-    }
-
-    .top-row, article {
+    .top-row,
+    article.content {
         padding-left: 2rem !important;
         padding-right: 1.5rem !important;
     }
 }
 
+/* ---------------------------
+   Blazor Error UI
+--------------------------- */
 #blazor-error-ui {
-    color-scheme: light only;
-    background: lightyellow;
-    bottom: 0;
-    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
-    box-sizing: border-box;
     display: none;
-    left: 0;
-    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
     position: fixed;
-    width: 100%;
+    bottom: 1rem;
+    left: 1rem;
+    right: 1rem;
+    padding: 0.75rem 1.25rem;
+    background-color: #fee2e2; /* soft red */
+    color: #b91c1c;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     z-index: 1000;
 }
 
-    #blazor-error-ui .dismiss {
-        cursor: pointer;
-        position: absolute;
-        right: 0.75rem;
-        top: 0.5rem;
-    }
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    top: 0.5rem;
+    right: 0.75rem;
+}
