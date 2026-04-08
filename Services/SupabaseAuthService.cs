@@ -74,10 +74,15 @@ public sealed class SupabaseAuthService
         {
             var error = TryDeserialize<SupabaseAuthError>(body);
             var errorMessage = ResolveErrorMessage(error, body, "Unable to log in. Check credentials and Supabase configuration.");
-            var errorCodeSuffix = string.IsNullOrWhiteSpace(error?.Code) ? string.Empty : $" [code: {error.Code}]";
 
-            _logger.LogWarning("Supabase login failed for {Email}. Status: {StatusCode}. Error: {Error}", email, (int)response.StatusCode, errorMessage);
-            return AuthResult.Failure($"{errorMessage}{errorCodeSuffix} (HTTP {(int)response.StatusCode})");
+            _logger.LogWarning("Supabase login failed for {Email}. Status: {StatusCode}. Error: {Error} [Code: {Code}]", email, (int)response.StatusCode, errorMessage, error?.Code ?? "unknown");
+            
+            // Show user-friendly message for 400 (invalid credentials), detailed message for other errors
+            var userMessage = (int)response.StatusCode == 400 
+                ? "Invalid email or password. Please try again."
+                : errorMessage;
+            
+            return AuthResult.Failure(userMessage);
         }
 
         var session = TryDeserialize<SupabaseSession>(body);
