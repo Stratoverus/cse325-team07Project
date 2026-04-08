@@ -19,6 +19,7 @@ public sealed class SupabaseAuthService
     private bool _restoreAttempted;
 
     private const string SessionStorageKey = "taskdone.auth.session.v1";
+    private const string InvalidSupabaseUrlMessage = "Supabase URL is invalid. Configure SUPABASE_URL as a full URL such as https://your-project.supabase.co.";
 
     public SupabaseSession? CurrentSession { get; private set; }
 
@@ -46,10 +47,13 @@ public sealed class SupabaseAuthService
     {
         if (string.IsNullOrWhiteSpace(_options.Url) || string.IsNullOrWhiteSpace(_options.AnonKey))
         {
-            return AuthResult.Failure("Supabase is not configured. Set SUPABASE_URL and SUPABASE_KEY in launchSettings profile environment variables.");
+            return AuthResult.Failure("Supabase is not configured. Set SUPABASE_URL and SUPABASE_KEY.");
         }
 
-        var endpoint = BuildEndpoint("/auth/v1/token?grant_type=password");
+        if (!TryBuildEndpoint("/auth/v1/token?grant_type=password", out var endpoint))
+        {
+            return AuthResult.Failure(InvalidSupabaseUrlMessage);
+        }
 
         using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
         {
@@ -102,7 +106,12 @@ public sealed class SupabaseAuthService
             return string.Empty;
         }
 
-        var endpoint = BuildEndpoint("/auth/v1/authorize");
+        if (!TryBuildEndpoint("/auth/v1/authorize", out var endpoint))
+        {
+            _logger.LogWarning("Unable to build OAuth sign-in URL because SUPABASE_URL is invalid. Value: {SupabaseUrl}", _options.Url);
+            return string.Empty;
+        }
+
         var query = new Dictionary<string, string>
         {
             { "provider", provider },
@@ -130,7 +139,12 @@ public sealed class SupabaseAuthService
     {
         try
         {
-            var endpoint = BuildEndpoint("/rest/v1/user_profiles?on_conflict=user_id");
+            if (!TryBuildEndpoint("/rest/v1/user_profiles?on_conflict=user_id", out var endpoint))
+            {
+                _logger.LogWarning("Unable to provision user_profiles row because SUPABASE_URL is invalid. Value: {SupabaseUrl}", _options.Url);
+                return;
+            }
+
             var payload = new[]
             {
                 new SupabaseProfileSeed
@@ -168,10 +182,13 @@ public sealed class SupabaseAuthService
     {
         if (string.IsNullOrWhiteSpace(_options.Url) || string.IsNullOrWhiteSpace(_options.AnonKey))
         {
-            return AuthResult.Failure("Supabase is not configured. Set SUPABASE_URL and SUPABASE_KEY in launchSettings profile environment variables.");
+            return AuthResult.Failure("Supabase is not configured. Set SUPABASE_URL and SUPABASE_KEY.");
         }
 
-        var endpoint = BuildEndpoint("/auth/v1/signup");
+        if (!TryBuildEndpoint("/auth/v1/signup", out var endpoint))
+        {
+            return AuthResult.Failure(InvalidSupabaseUrlMessage);
+        }
 
         using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
         {
@@ -323,10 +340,57 @@ public sealed class SupabaseAuthService
         }
     }
 
-    private Uri BuildEndpoint(string relativePath)
+    private bool TryBuildEndpoint(string relativePath, out Uri endpoint)
     {
-        var baseUrl = _options.Url.TrimEnd('/');
-        return new Uri($"{baseUrl}{relativePath}");
+        endpoint = default!;
+
+        var baseUri = TryGetSupabaseBaseUri();
+        if (baseUri is null)
+        {
+            return false;
+        }
+
+        var normalizedPath = relativePath.StartsWith('/') ? relativePath : $"/{relativePath}";
+        endpoint = new Uri(baseUri, normalizedPath);
+        return true;
+    }
+
+    private Uri? TryGetSupabaseBaseUri()
+    {
+        var raw = _options.Url?.Trim();
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        raw = raw.Trim('"', '\'', ' ');
+
+        if (Uri.TryCreate(raw, UriKind.Absolute, out var absoluteUri) && !string.IsNullOrWhiteSpace(absoluteUri.Host))
+        {
+            return EnsureTrailingSlash(absoluteUri);
+        }
+
+        if (!raw.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+            !raw.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            var assumedHttps = $"https://{raw}";
+            if (Uri.TryCreate(assumedHttps, UriKind.Absolute, out var httpsUri) && !string.IsNullOrWhiteSpace(httpsUri.Host))
+            {
+                return EnsureTrailingSlash(httpsUri);
+            }
+        }
+
+        return null;
+    }
+
+    private static Uri EnsureTrailingSlash(Uri uri)
+    {
+        if (uri.AbsoluteUri.EndsWith('/'))
+        {
+            return uri;
+        }
+
+        return new Uri(uri.AbsoluteUri + "/", UriKind.Absolute);
     }
 
     private static T? TryDeserialize<T>(string json)
@@ -437,7 +501,12 @@ public sealed class SupabaseAuthService
             return false;
         }
 
-        var endpoint = BuildEndpoint("/auth/v1/token?grant_type=refresh_token");
+        if (!TryBuildEndpoint("/auth/v1/token?grant_type=refresh_token", out var endpoint))
+        {
+            _logger.LogWarning("Unable to refresh session because SUPABASE_URL is invalid. Value: {SupabaseUrl}", _options.Url);
+            return false;
+        }
+
         using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
         {
             Content = JsonContent.Create(new
