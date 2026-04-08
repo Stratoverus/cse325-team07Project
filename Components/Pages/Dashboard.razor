@@ -22,8 +22,10 @@
 }
 else
 {
-    <div class="mb-3">
-        <NavLink class="btn btn-success" href="/add-task">Add New Task</NavLink>
+    <div class="mb-3 d-flex gap-2">
+        <NavLink class="btn btn-success" href="@GetAddTaskUrl()">Add New Task</NavLink>
+        <NavLink class="btn btn-outline-secondary" href="@GetProfileUrl()">Back to Profile</NavLink>
+        <button type="button" class="btn btn-outline-danger" @onclick="HandleLogoutAsync">Logout</button>
     </div>
 
     <div class="row">
@@ -56,7 +58,7 @@ else
     @if (currentFamilyMember != null)
     {
         <div class="alert alert-info d-flex align-items-center justify-content-between mb-3">
-            <span>Points balance: <strong>@currentFamilyMember.PointsBalance pts</strong></span>
+            <span>Points balance: <strong>@(currentFamilyMember.PointsBalance ?? 0) pts</strong></span>
             <NavLink class="btn btn-sm btn-warning" href="rewards">Redeem Points</NavLink>
         </div>
     }
@@ -116,7 +118,7 @@ else
                                     <span class="badge bg-secondary">Pending</span>
                                 }
                             </td>
-                            <td>@task.DueDate?.ToShortDateString() ?? "No due date"</td>
+                            <td>@(task.DueDate?.ToShortDateString() ?? "No due date")</td>
                             <td>
                                 @if (!task.AcceptedByChild)
                                 {
@@ -203,9 +205,14 @@ else
     private List<Announcement> announcements = new();
     private string familyId = string.Empty;
     private FamilyMember? currentFamilyMember = null;
+    private string? requestedFamilyId;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
+        await AuthService.EnsureSessionRestoredAsync();
+
+        requestedFamilyId = GetRequestedFamilyId();
+
         await LoadDataAsync();
     }
 
@@ -224,8 +231,21 @@ else
         var token = AuthService.CurrentSession?.AccessToken ?? string.Empty;
 
         currentProfile = await UserProfileService.GetProfileAsync(userId, token);
-        familyId = await RewardService.GetFamilyIdAsync(userId, token) ?? string.Empty;
-        currentFamilyMember = await RewardService.GetFamilyMemberAsync(userId, token);
+        var memberships = await RewardService.GetFamilyMembershipsAsync(userId, token);
+
+        FamilyMember? selectedMembership = null;
+        if (!string.IsNullOrWhiteSpace(requestedFamilyId))
+        {
+            selectedMembership = memberships.FirstOrDefault(m =>
+                string.Equals(m.FamilyId, requestedFamilyId, StringComparison.Ordinal));
+        }
+
+        selectedMembership ??= memberships
+            .OrderByDescending(m => m.JoinedAt)
+            .FirstOrDefault();
+
+        currentFamilyMember = selectedMembership;
+        familyId = selectedMembership?.FamilyId ?? string.Empty;
 
         if (string.IsNullOrWhiteSpace(familyId))
         {
@@ -257,9 +277,10 @@ else
 
         if (task.IsDone && currentFamilyMember != null)
         {
-            currentFamilyMember.PointsBalance += task.PointValue;
-            await RewardService.UpdatePointsAsync(currentFamilyMember.FamilyMemberId, currentFamilyMember.PointsBalance, AuthService.CurrentSession?.AccessToken ?? string.Empty);
-            pointsMessage = $"You earned {task.PointValue} points! Total: {currentFamilyMember.PointsBalance}";
+            var updatedPoints = (currentFamilyMember.PointsBalance ?? 0) + task.PointValue;
+            currentFamilyMember.PointsBalance = updatedPoints;
+            await RewardService.UpdatePointsAsync(currentFamilyMember.FamilyMemberId, updatedPoints, AuthService.CurrentSession?.AccessToken ?? string.Empty);
+            pointsMessage = $"You earned {task.PointValue} points! Total: {updatedPoints}";
         }
         else
         {
@@ -399,5 +420,40 @@ else
         {
             isPostingAnnouncement = false;
         }
+    }
+
+    private async Task HandleLogoutAsync()
+    {
+        await AuthService.SignOutAsync();
+        Navigation.NavigateTo("/login", forceLoad: false);
+    }
+
+    private string? GetRequestedFamilyId()
+    {
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+
+        if (!query.TryGetValue("familyId", out var value) || string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return value.ToString();
+    }
+
+    private string GetAddTaskUrl()
+    {
+        if (string.IsNullOrWhiteSpace(familyId))
+        {
+            return "/add-task";
+        }
+
+        return $"/add-task?familyId={Uri.EscapeDataString(familyId)}";
+    }
+
+    private string GetProfileUrl()
+    {
+        var userId = AuthService.CurrentUserId;
+        return string.IsNullOrWhiteSpace(userId) ? "/profile" : $"/profile/{userId}";
     }
 }

@@ -9,6 +9,7 @@
 @inject SupabaseAuthService AuthService
 @inject UserProfileService UserProfileService
 @inject RewardService RewardService
+@inject NavigationManager Navigation
 
 <h3>Add New Task</h3>
 
@@ -43,7 +44,13 @@ else
 
         <div class="mb-3">
             <label class="form-label">Assigned To</label>
-            <InputText class="form-control" @bind-Value="newTask.AssignedTo" />
+            <InputSelect class="form-select" @bind-Value="selectedAssigneeUserId">
+                <option value="">Select a family member</option>
+                @foreach (var assignee in assigneeOptions)
+                {
+                    <option value="@assignee.UserId">@assignee.DisplayName</option>
+                }
+            </InputSelect>
         </div>
 
         <div class="mb-3">
@@ -59,6 +66,7 @@ else
         <div class="mb-3">
             <button type="submit" class="btn btn-primary">Add Task</button>
             <button type="button" class="btn btn-outline-secondary ms-2" @onclick="ClearForm">Clear Form</button>
+            <button type="button" class="btn btn-outline-primary ms-2" @onclick="NavigateBackToDashboard">Back to Family Dashboard</button>
             <span class="ms-3 text-success">@message</span>
         </div>
     </EditForm>
@@ -85,7 +93,7 @@ else
                     <tr>
                         <td>@task.Title</td>
                         <td>@task.AssignedTo</td>
-                        <td>@task.DueDate?.ToShortDateString() ?? "No due date"</td>
+                        <td>@(task.DueDate?.ToShortDateString() ?? "No due date")</td>
                         <td>@(task.IsDone ? "Completed" : "Pending")</td>
                     </tr>
                 }
@@ -100,9 +108,14 @@ else
     private List<TaskItem> currentTasks = new();
     private UserProfile? currentProfile;
     private string familyId = string.Empty;
+    private string? requestedFamilyId;
+    private string selectedAssigneeUserId = string.Empty;
+    private List<AssigneeOption> assigneeOptions = new();
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
+        await AuthService.EnsureSessionRestoredAsync();
+        requestedFamilyId = GetRequestedFamilyId();
         await LoadTasksAsync();
     }
 
@@ -113,6 +126,8 @@ else
             currentProfile = null;
             familyId = string.Empty;
             currentTasks = new List<TaskItem>();
+            assigneeOptions = new List<AssigneeOption>();
+            selectedAssigneeUserId = string.Empty;
             return;
         }
 
@@ -120,15 +135,31 @@ else
         var token = AuthService.CurrentSession?.AccessToken ?? string.Empty;
 
         currentProfile = await UserProfileService.GetProfileAsync(userId, token);
-        familyId = await RewardService.GetFamilyIdAsync(userId, token) ?? string.Empty;
+        var memberships = await RewardService.GetFamilyMembershipsAsync(userId, token);
+
+        FamilyMember? selectedMembership = null;
+        if (!string.IsNullOrWhiteSpace(requestedFamilyId))
+        {
+            selectedMembership = memberships.FirstOrDefault(m =>
+                string.Equals(m.FamilyId, requestedFamilyId, StringComparison.Ordinal));
+        }
+
+        selectedMembership ??= memberships
+            .OrderByDescending(m => m.JoinedAt)
+            .FirstOrDefault();
+
+        familyId = selectedMembership?.FamilyId ?? string.Empty;
 
         if (!string.IsNullOrWhiteSpace(familyId))
         {
             currentTasks = TaskService.GetTasksByFamilyId(familyId).ToList();
+            await LoadAssigneeOptionsAsync(familyId, token);
         }
         else
         {
             currentTasks = new List<TaskItem>();
+            assigneeOptions = new List<AssigneeOption>();
+            selectedAssigneeUserId = string.Empty;
         }
     }
 
@@ -137,6 +168,12 @@ else
         if (string.IsNullOrWhiteSpace(newTask.Title))
         {
             message = "Title is required.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(selectedAssigneeUserId))
+        {
+            message = "Please select a family member to assign this task to.";
             return;
         }
 
@@ -158,6 +195,17 @@ else
             newTask.TaskId = Guid.NewGuid().ToString();
         }
 
+        var selectedAssignee = assigneeOptions.FirstOrDefault(x =>
+            string.Equals(x.UserId, selectedAssigneeUserId, StringComparison.Ordinal));
+
+        if (selectedAssignee is null)
+        {
+            message = "Selected assignee is no longer available for this family.";
+            return;
+        }
+
+        newTask.AssignedTo = selectedAssignee.DisplayName;
+
         TaskService.AddTask(newTask);
         message = "Task added!";
 
@@ -168,6 +216,71 @@ else
     private void ClearForm()
     {
         newTask = new TaskItem { DueDate = DateTime.Today, FamilyId = familyId };
+        selectedAssigneeUserId = string.Empty;
         message = string.Empty;
     }
+
+    private void NavigateBackToDashboard()
+    {
+        if (string.IsNullOrWhiteSpace(familyId))
+        {
+            Navigation.NavigateTo("/dashboard");
+            return;
+        }
+
+        Navigation.NavigateTo($"/dashboard?familyId={Uri.EscapeDataString(familyId)}");
+    }
+
+    private string? GetRequestedFamilyId()
+    {
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+
+        if (!query.TryGetValue("familyId", out var value) || string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return value.ToString();
+    }
+
+    private async Task LoadAssigneeOptionsAsync(string selectedFamilyId, string accessToken)
+    {
+        assigneeOptions = new List<AssigneeOption>();
+        selectedAssigneeUserId = string.Empty;
+
+        var familyMembers = await RewardService.GetFamilyMembershipsByFamilyIdAsync(selectedFamilyId, accessToken);
+
+        var uniqueMemberIds = familyMembers
+            .Select(m => m.UserId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        foreach (var memberUserId in uniqueMemberIds)
+        {
+            var profile = await UserProfileService.GetProfileAsync(memberUserId, accessToken);
+
+            var displayName = profile is null
+                ? memberUserId
+                : !string.IsNullOrWhiteSpace(profile.PreferredDisplayName)
+                    ? profile.PreferredDisplayName
+                    : !string.IsNullOrWhiteSpace(profile.FullName)
+                        ? profile.FullName
+                        : profile.Email;
+
+            assigneeOptions.Add(new AssigneeOption(memberUserId, displayName));
+        }
+
+        assigneeOptions = assigneeOptions
+            .OrderBy(x => x.DisplayName)
+            .ToList();
+
+        if (assigneeOptions.Count == 1)
+        {
+            selectedAssigneeUserId = assigneeOptions[0].UserId;
+        }
+    }
+
+    private sealed record AssigneeOption(string UserId, string DisplayName);
 }

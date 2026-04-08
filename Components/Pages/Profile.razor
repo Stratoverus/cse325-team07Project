@@ -3,12 +3,20 @@
 @rendermode InteractiveServer
 @inject TaskDone.Services.SupabaseAuthService AuthService
 @inject TaskDone.Services.UserProfileService ProfileService
+@inject TaskDone.Services.RewardService RewardService
 @inject NavigationManager Navigation
 @inject Supabase.Client SupabaseClient
 
 <PageTitle>Profile</PageTitle>
 
 <h3>Your Profile</h3>
+
+@if (AuthService.IsAuthenticated)
+{
+    <div class="mb-3">
+        <button type="button" class="btn btn-outline-danger" @onclick="HandleLogoutAsync">Logout</button>
+    </div>
+}
 
 <ErrorBoundary>
     <ChildContent>
@@ -119,30 +127,107 @@
                     </div>
                 </div>
 
-                <div class="card shadow-sm">
-                    <div class="card-body text-center">
-                        <h5 class="card-title">Family Setup</h5>
-                        <p class="text-muted">Start by creating your family or joining one you've been invited to.</p>
-                        <div class="d-flex justify-content-center gap-2">
-                            <button type="button" class="btn btn-primary" @onclick="OpenCreateFamForm">Create a Family</button>
-                            <button type="button" class="btn btn-outline-primary" @onclick="OpenModal">Join a Family</button>
+                @if (profile.IsFirstLoginComplete && familyTiles.Count == 0)
+                {
+                    <div class="card shadow-sm">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">Family Setup</h5>
+                            <p class="text-muted">Start by creating your family or joining one you've been invited to.</p>
+                            <div class="d-flex justify-content-center gap-2">
+                                <button type="button" class="btn btn-primary" @onclick="OpenCreateFamForm">Create a Family</button>
+                                <button type="button" class="btn btn-outline-primary" @onclick="OpenModal">Join a Family</button>
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(familyMessage))
+                            {
+                                <p class="mt-3 text-muted">@familyMessage</p>
+                            }
                         </div>
-                        @if (!string.IsNullOrWhiteSpace(familyMessage))
-                        {
-                            <p class="mt-3 text-muted">@familyMessage</p>
-                        }
                     </div>
-                </div>
 
-                <div class="card shadow-sm">
-                    <div class="card-body">
-                        <h5 class="card-title">Getting Started</h5>
-                        <ul class="mb-0">
-                            <li>Create or join your family group.</li>
-                            <li>Add your first household tasks.</li>
-                            <li>Invite the other parent and your kids.</li>
-                        </ul>
+                    <div class="card shadow-sm">
+                        <div class="card-body">
+                            <h5 class="card-title">Getting Started</h5>
+                            <ul class="mb-0">
+                                <li>Create or join your family group.</li>
+                                <li>Add your first household tasks.</li>
+                                <li>Invite the other parent and your kids.</li>
+                            </ul>
+                        </div>
                     </div>
+                }
+            </div>
+        }
+
+        @if (familyTiles.Count > 0)
+        {
+            <div class="d-grid gap-3 mt-3">
+                <div>
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <h5 class="mb-1">Your Families</h5>
+                            <p class="text-muted mb-0">Choose a family workspace or add another one.</p>
+                        </div>
+                    </div>
+
+                    <div class="row row-cols-1 row-cols-lg-2 g-3">
+                        @foreach (var familyTile in familyTiles)
+                        {
+                            <div class="col">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-body d-flex flex-column">
+                                        <div class="d-flex justify-content-between align-items-start gap-3">
+                                            <div>
+                                                <h5 class="card-title mb-1">@familyTile.FamilyName</h5>
+                                                <p class="text-muted mb-0">@familyTile.RoleLabel</p>
+                                            </div>
+
+                                            @if (familyTile.IsCreator)
+                                            {
+                                                <span class="badge bg-success">Creator</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-secondary">Member</span>
+                                            }
+                                        </div>
+
+                                        <hr />
+
+                                        <p class="mb-1"><strong>Joined:</strong> @familyTile.JoinedAt.ToLocalTime().ToString("g")</p>
+                                        <p class="mb-1"><strong>Points:</strong> @familyTile.PointsBalance pts</p>
+                                        <p class="mb-0 text-muted">This family is available in your dashboard and task pages.</p>
+
+                                        <div class="mt-auto pt-3 d-flex gap-2">
+                                            <button type="button" class="btn btn-primary" @onclick="() => OpenDashboard(familyTile.FamilyId)">
+                                                Open Dashboard
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+
+                        <div class="col">
+                            <div class="card shadow-sm h-100 border-dashed">
+                                <div class="card-body d-flex flex-column justify-content-between">
+                                    <div>
+                                        <h5 class="card-title">Add Another Family</h5>
+                                        <p class="text-muted mb-0">Create a new family or join one with an invite code.</p>
+                                    </div>
+
+                                    <div class="d-grid gap-2 mt-4">
+                                        <button type="button" class="btn btn-primary" @onclick="OpenCreateFamForm">Create a Family</button>
+                                        <button type="button" class="btn btn-outline-primary" @onclick="OpenModal">Join a Family</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(familyMessage))
+                    {
+                        <p class="mt-3 text-muted">@familyMessage</p>
+                    }
                 </div>
             </div>
         }
@@ -155,13 +240,11 @@
 </ErrorBoundary>
 
 @* Join a Family Modal *@
-
 @if (showModal)
 {
     <div class="modal fade show" style="display: block; background: rgba(0,0,0,0.5);" tabindex="-1" role="dialog">
         <div class="modal-dialog" role="document">
             <div class="modal-content">
-                
                 <div class="modal-header">
                     <h5 class="modal-title">Join a Family</h5>
                     <button type="button" class="btn-close" @onclick="CloseModal" aria-label="Close"></button>
@@ -169,7 +252,7 @@
 
                 <div class="modal-body">
                     <p>Enter the 6-character code to join a family.</p>
-                    
+
                     <input type="text"
                            class="form-control"
                            placeholder="e.g. A3K9MZ"
@@ -186,17 +269,11 @@
                 </div>
 
                 <div class="modal-footer">
-                    <button type="button" 
-                            class="btn btn-secondary" 
-                            @onclick="CloseModal">
-                        Close
-                    </button>
-                    
-                    <button type="button" 
+                    <button type="button" class="btn btn-secondary" @onclick="CloseModal">Close</button>
+                    <button type="button"
                             class="btn btn-primary"
                             @onclick="HandleJoinFamilyAsync"
                             disabled="@(isJoiningFamily || string.IsNullOrEmpty(joinFamilyCode))">
-                        
                         @if (isJoiningFamily)
                         {
                             <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
@@ -208,15 +285,14 @@
                         }
                     </button>
                 </div>
-
             </div>
         </div>
     </div>
 }
 
-@* Create a Family Form *@
-
-@if (showCreateFamForm) {
+@* Create a Family Modal *@
+@if (showCreateFamForm)
+{
     <div class="modal fade show" style="display: block; background: rgba(0,0,0,0.5);" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content shadow-lg">
@@ -224,25 +300,26 @@
                     <h5 class="modal-title">Create a Family</h5>
                     <button type="button" class="btn-close" @onclick="CloseCreateFamForm"></button>
                 </div>
-                
+
                 <EditForm Model="newFamily" OnValidSubmit="HandleCreateFamilyAsync">
                     <div class="modal-body">
                         <p class="text-muted">Set up a new family group.</p>
                         <div class="mb-3">
-                            <label class="form-label font-weight-bold">Family Name</label>
-
+                            <label class="form-label fw-bold">Family Name</label>
                             <InputText class="form-control" @bind-Value="newFamily.FamilyName" placeholder="e.g. The Smith Family" />
                         </div>
                     </div>
 
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" @onclick="CloseCreateFamForm">Cancel</button>
-
                         <button type="submit" class="btn btn-success" disabled="@isCreatingFamily">
-                            @if (isCreatingFamily) {
+                            @if (isCreatingFamily)
+                            {
                                 <span class="spinner-border spinner-border-sm"></span>
                                 <span> Creating...</span>
-                            } else {
+                            }
+                            else
+                            {
                                 <span>Create Family</span>
                             }
                         </button>
@@ -277,11 +354,14 @@
     private string joinFamilyCode = string.Empty;
     private string joinFamilyMessage = string.Empty;
     private bool isJoiningFamily = false;
+    private List<FamilyTileViewModel> familyTiles = new();
 
     protected override async Task OnParametersSetAsync()
     {
         loadError = string.Empty;
         isLoaded = false;
+
+        await AuthService.EnsureSessionRestoredAsync();
 
         try
         {
@@ -296,20 +376,37 @@
             if (isAuthorizedForRoute && !string.IsNullOrWhiteSpace(currentUserId) && !string.IsNullOrWhiteSpace(accessToken))
             {
                 profile = await ProfileService.EnsureDraftProfileAsync(currentUserId, currentEmail, accessToken);
+                await LoadFamilyTilesAsync(currentUserId, accessToken);
             }
             else
             {
                 profile = null;
+                familyTiles = new List<FamilyTileViewModel>();
+
+                if (!string.IsNullOrWhiteSpace(currentUserId) &&
+                    !string.IsNullOrWhiteSpace(routeUserId) &&
+                    !string.Equals(routeUserId, currentUserId, StringComparison.Ordinal))
+                {
+                    Navigation.NavigateTo($"/profile/{currentUserId}", forceLoad: false);
+                    return;
+                }
             }
         }
         catch (Exception ex)
         {
             profile = null;
             isAuthorizedForRoute = false;
+            familyTiles = new List<FamilyTileViewModel>();
             loadError = $"Profile failed to load: {ex.Message}";
         }
 
         isLoaded = true;
+    }
+
+    private async Task HandleLogoutAsync()
+    {
+        await AuthService.SignOutAsync();
+        Navigation.NavigateTo("/login", forceLoad: false);
     }
 
     private async Task SaveProfileAsync()
@@ -355,6 +452,17 @@
     private void ShowJoinFamilyPlaceholder()
     {
         familyMessage = "Family invite and join options will appear here.";
+    }
+
+    private void OpenDashboard(string? targetFamilyId = null)
+    {
+        if (string.IsNullOrWhiteSpace(targetFamilyId))
+        {
+            Navigation.NavigateTo("/dashboard");
+            return;
+        }
+
+        Navigation.NavigateTo($"/dashboard?familyId={Uri.EscapeDataString(targetFamilyId)}");
     }
 
     private string GetWelcomeName()
@@ -403,6 +511,57 @@
     }
 
     private sealed record TimeZoneOption(string Id, string Label);
+
+    private sealed record FamilyTileViewModel(
+        string FamilyId,
+        string FamilyName,
+        string RoleLabel,
+        DateTime JoinedAt,
+        bool IsCreator,
+        int PointsBalance);
+
+    private async Task LoadFamilyTilesAsync(string currentUserId, string accessToken)
+    {
+        familyTiles = new List<FamilyTileViewModel>();
+
+        if (string.IsNullOrWhiteSpace(currentUserId) || string.IsNullOrWhiteSpace(accessToken))
+        {
+            return;
+        }
+
+        var memberships = (await RewardService.GetFamilyMembershipsAsync(currentUserId, accessToken))
+            .OrderByDescending(m => m.JoinedAt)
+            .ToList();
+
+        foreach (var membership in memberships)
+        {
+            if (string.IsNullOrWhiteSpace(membership.FamilyId))
+            {
+                continue;
+            }
+
+            var familySummary = await RewardService.GetFamilySummaryAsync(membership.FamilyId, accessToken);
+            if (familySummary is null)
+            {
+                continue;
+            }
+
+            var isCreator = string.Equals(familySummary.Value.CreatedByUserId, currentUserId, StringComparison.Ordinal);
+            var roleLabel = isCreator
+                ? "Family creator"
+                : string.IsNullOrWhiteSpace(membership.Role)
+                    ? "Family member"
+                    : $"Role: {membership.Role}";
+
+            familyTiles.Add(new FamilyTileViewModel(
+                familySummary.Value.FamilyId,
+                familySummary.Value.FamilyName,
+                roleLabel,
+                membership.JoinedAt,
+                isCreator,
+                membership.PointsBalance ?? 0));
+        }
+    }
 
     private async Task HandleCreateFamilyAsync()
     {

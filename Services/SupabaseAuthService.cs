@@ -1,8 +1,10 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
+using Microsoft.JSInterop;
 using TaskDone.Models;
 
 namespace TaskDone.Services;
@@ -12,20 +14,32 @@ public sealed class SupabaseAuthService
     private readonly HttpClient _httpClient;
     private readonly SupabaseOptions _options;
     private readonly ILogger<SupabaseAuthService> _logger;
+    private readonly IJSRuntime _jsRuntime;
+    private readonly SemaphoreSlim _restoreLock = new(1, 1);
+    private bool _restoreAttempted;
+
+    private const string SessionStorageKey = "taskdone.auth.session.v1";
 
     public SupabaseSession? CurrentSession { get; private set; }
 
-    public bool IsAuthenticated => !string.IsNullOrWhiteSpace(CurrentSession?.AccessToken);
+    public bool IsAuthenticated =>
+        !string.IsNullOrWhiteSpace(CurrentSession?.AccessToken) &&
+        !IsAccessTokenExpired(CurrentSession.AccessToken);
     public string? CurrentUserId => CurrentSession?.User?.Id;
     public string? CurrentUserEmail => CurrentSession?.User?.Email;
 
     public event Action? AuthStateChanged;
 
-    public SupabaseAuthService(HttpClient httpClient, IOptions<SupabaseOptions> options, ILogger<SupabaseAuthService> logger)
+    public SupabaseAuthService(
+        HttpClient httpClient,
+        IOptions<SupabaseOptions> options,
+        ILogger<SupabaseAuthService> logger,
+        IJSRuntime jsRuntime)
     {
         _httpClient = httpClient;
         _options = options.Value;
         _logger = logger;
+        _jsRuntime = jsRuntime;
     }
 
     public async Task<AuthResult> SignInWithPasswordAsync(string email, string password, CancellationToken cancellationToken = default)
@@ -73,11 +87,81 @@ public sealed class SupabaseAuthService
         }
 
         CurrentSession = session;
+        await PersistSessionAsync(CurrentSession, cancellationToken);
         await EnsureAppUserRecordAsync(session.User.Id, session.User.Email, session.AccessToken, cancellationToken);
         NotifyAuthStateChanged();
 
         _logger.LogInformation("Supabase login successful for {Email}", session.User?.Email ?? email);
         return AuthResult.Success();
+    }
+
+    public string GetOAuthSignInUrl(string provider, string redirectTo)
+    {
+        if (string.IsNullOrWhiteSpace(_options.Url) || string.IsNullOrWhiteSpace(_options.AnonKey))
+        {
+            return string.Empty;
+        }
+
+        var endpoint = BuildEndpoint("/auth/v1/authorize");
+        var query = new Dictionary<string, string>
+        {
+            { "provider", provider },
+            { "redirect_to", redirectTo },
+            { "scopes", "openid profile email" }
+        };
+
+        var queryString = string.Join("&", query.Select(kvp => $"{Uri.EscapeDataString(kvp.Key)}={Uri.EscapeDataString(kvp.Value)}"));
+        return $"{endpoint}?{queryString}";
+    }
+
+    public async Task SetSessionAsync(SupabaseSession session, CancellationToken cancellationToken = default)
+    {
+        if (session is null || string.IsNullOrWhiteSpace(session.AccessToken))
+        {
+            return;
+        }
+
+        CurrentSession = session;
+        await PersistSessionAsync(CurrentSession, cancellationToken);
+        NotifyAuthStateChanged();
+    }
+
+    public async Task EnsureAppUserRecordAsync(string userId, string email, string accessToken, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var endpoint = BuildEndpoint("/rest/v1/user_profiles?on_conflict=user_id");
+            var payload = new[]
+            {
+                new SupabaseProfileSeed
+                {
+                    UserId = userId,
+                    Email = email,
+                    TimeZone = TimeZoneInfo.Local.Id,
+                    UpdatedUtc = DateTime.UtcNow
+                }
+            };
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
+            {
+                Content = JsonContent.Create(payload)
+            };
+
+            request.Headers.Add("apikey", _options.AnonKey);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            request.Headers.TryAddWithoutValidation("Prefer", "resolution=merge-duplicates,return=minimal");
+
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogWarning("Unable to provision user_profiles row for {UserId}. Status: {StatusCode}. Body: {Body}", userId, (int)response.StatusCode, body);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to provision app user record for {UserId}", userId);
+        }
     }
 
     public async Task<AuthResult> SignUpWithPasswordAsync(string email, string password, CancellationToken cancellationToken = default)
@@ -160,6 +244,7 @@ public sealed class SupabaseAuthService
         if (!string.IsNullOrWhiteSpace(session?.AccessToken))
         {
             CurrentSession = session;
+            await PersistSessionAsync(CurrentSession, cancellationToken);
             await EnsureAppUserRecordAsync(user.Id, user.Email, session.AccessToken, cancellationToken);
             NotifyAuthStateChanged();
             _logger.LogInformation("Supabase signup successful and session created for {Email}", email);
@@ -170,11 +255,72 @@ public sealed class SupabaseAuthService
         return AuthResult.Success("Account created. Check your email to verify your account, then sign in.");
     }
 
-    public Task SignOutAsync()
+    public async Task SignOutAsync()
     {
         CurrentSession = null;
+        await ClearPersistedSessionAsync();
         NotifyAuthStateChanged();
-        return Task.CompletedTask;
+    }
+
+    public async Task<bool> EnsureSessionRestoredAsync(CancellationToken cancellationToken = default)
+    {
+        if (_restoreAttempted)
+        {
+            return true;
+        }
+
+        await _restoreLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (_restoreAttempted)
+            {
+                return true;
+            }
+
+            var restoreResult = await TryGetStoredSessionAsync(cancellationToken);
+            if (!restoreResult.CouldAccessStorage)
+            {
+                // During prerender, JS interop may be unavailable. Retry on next interactive render.
+                return false;
+            }
+
+            var serializedSession = restoreResult.SerializedSession;
+            if (string.IsNullOrWhiteSpace(serializedSession))
+            {
+                _restoreAttempted = true;
+                return true;
+            }
+
+            var restoredSession = TryDeserialize<SupabaseSession>(serializedSession);
+            if (restoredSession is null || restoredSession.User is null || string.IsNullOrWhiteSpace(restoredSession.AccessToken))
+            {
+                await ClearPersistedSessionAsync();
+                _restoreAttempted = true;
+                return true;
+            }
+
+            if (IsAccessTokenExpired(restoredSession.AccessToken))
+            {
+                var refreshed = await RefreshSessionAsync(restoredSession.RefreshToken, cancellationToken);
+                if (!refreshed)
+                {
+                    CurrentSession = null;
+                    await ClearPersistedSessionAsync();
+                }
+            }
+            else
+            {
+                CurrentSession = restoredSession;
+            }
+
+            _restoreAttempted = true;
+            NotifyAuthStateChanged();
+            return true;
+        }
+        finally
+        {
+            _restoreLock.Release();
+        }
     }
 
     private Uri BuildEndpoint(string relativePath)
@@ -230,50 +376,153 @@ public sealed class SupabaseAuthService
 
     private void NotifyAuthStateChanged() => AuthStateChanged?.Invoke();
 
+    private async Task PersistSessionAsync(SupabaseSession? session, CancellationToken cancellationToken = default)
+    {
+        if (session is null)
+        {
+            await ClearPersistedSessionAsync();
+            return;
+        }
+
+        try
+        {
+            var json = JsonSerializer.Serialize(session, JsonOptions);
+            await _jsRuntime.InvokeVoidAsync("localStorage.setItem", cancellationToken, SessionStorageKey, json);
+        }
+        catch (InvalidOperationException)
+        {
+            // JS runtime might not be available during prerender.
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected before storage operation completed.
+        }
+    }
+
+    private async Task<SessionRestoreReadResult> TryGetStoredSessionAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var serializedSession = await _jsRuntime.InvokeAsync<string?>("localStorage.getItem", cancellationToken, SessionStorageKey);
+            return new SessionRestoreReadResult(true, serializedSession);
+        }
+        catch (InvalidOperationException)
+        {
+            return new SessionRestoreReadResult(false, null);
+        }
+        catch (JSDisconnectedException)
+        {
+            return new SessionRestoreReadResult(false, null);
+        }
+    }
+
+    private async Task ClearPersistedSessionAsync()
+    {
+        try
+        {
+            await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", SessionStorageKey);
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    private async Task<bool> RefreshSessionAsync(string refreshToken, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(refreshToken))
+        {
+            return false;
+        }
+
+        var endpoint = BuildEndpoint("/auth/v1/token?grant_type=refresh_token");
+        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
+        {
+            Content = JsonContent.Create(new
+            {
+                refresh_token = refreshToken
+            })
+        };
+
+        request.Headers.Add("apikey", _options.AnonKey);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.AnonKey);
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return false;
+        }
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        var session = TryDeserialize<SupabaseSession>(body);
+        if (session is null || session.User is null || string.IsNullOrWhiteSpace(session.AccessToken))
+        {
+            return false;
+        }
+
+        CurrentSession = session;
+        await PersistSessionAsync(CurrentSession, cancellationToken);
+        return true;
+    }
+
+    private static bool IsAccessTokenExpired(string? jwt)
+    {
+        if (string.IsNullOrWhiteSpace(jwt))
+        {
+            return true;
+        }
+
+        var parts = jwt.Split('.');
+        if (parts.Length < 2)
+        {
+            return true;
+        }
+
+        try
+        {
+            var payloadJson = DecodeBase64Url(parts[1]);
+            using var doc = JsonDocument.Parse(payloadJson);
+            if (!doc.RootElement.TryGetProperty("exp", out var expElement))
+            {
+                return false;
+            }
+
+            if (!expElement.TryGetInt64(out var expUnix))
+            {
+                return false;
+            }
+
+            var expiresUtc = DateTimeOffset.FromUnixTimeSeconds(expUnix);
+            return expiresUtc <= DateTimeOffset.UtcNow;
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    private static string DecodeBase64Url(string input)
+    {
+        var normalized = input.Replace('-', '+').Replace('_', '/');
+        var padding = 4 - (normalized.Length % 4);
+        if (padding is > 0 and < 4)
+        {
+            normalized = normalized.PadRight(normalized.Length + padding, '=');
+        }
+
+        var bytes = Convert.FromBase64String(normalized);
+        return Encoding.UTF8.GetString(bytes);
+    }
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
         NumberHandling = JsonNumberHandling.AllowReadingFromString
     };
 
-    private async Task EnsureAppUserRecordAsync(string userId, string email, string accessToken, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var endpoint = BuildEndpoint("/rest/v1/user_profiles?on_conflict=user_id");
-            var payload = new[]
-            {
-                new SupabaseProfileSeed
-                {
-                    UserId = userId,
-                    Email = email,
-                    TimeZone = TimeZoneInfo.Local.Id,
-                    IsFirstLoginComplete = false,
-                    UpdatedUtc = DateTime.UtcNow
-                }
-            };
-
-            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
-            {
-                Content = JsonContent.Create(payload)
-            };
-
-            request.Headers.Add("apikey", _options.AnonKey);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-            request.Headers.TryAddWithoutValidation("Prefer", "resolution=merge-duplicates,return=minimal");
-
-            using var response = await _httpClient.SendAsync(request, cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                var body = await response.Content.ReadAsStringAsync(cancellationToken);
-                _logger.LogWarning("Unable to provision user_profiles row for {UserId}. Status: {StatusCode}. Body: {Body}", userId, (int)response.StatusCode, body);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to provision app user record for {UserId}", userId);
-        }
-    }
+    private sealed record SessionRestoreReadResult(bool CouldAccessStorage, string? SerializedSession);
 
     private sealed class SupabaseProfileSeed
     {
@@ -285,9 +534,6 @@ public sealed class SupabaseAuthService
 
         [JsonPropertyName("time_zone")]
         public string TimeZone { get; set; } = string.Empty;
-
-        [JsonPropertyName("is_first_login_complete")]
-        public bool IsFirstLoginComplete { get; set; }
 
         [JsonPropertyName("updated_utc")]
         public DateTime UpdatedUtc { get; set; }

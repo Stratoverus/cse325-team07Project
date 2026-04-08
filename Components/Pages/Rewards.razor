@@ -21,7 +21,7 @@ else
     @if (currentFamilyMember != null)
     {
         <div class="alert alert-info mb-3">
-            Your points balance: <strong>@currentFamilyMember.PointsBalance pts</strong>
+            Your points balance: <strong>@(currentFamilyMember.PointsBalance ?? 0) pts</strong>
         </div>
     }
 
@@ -75,8 +75,8 @@ else
                             <p class="card-text text-muted">@reward.Description</p>
                             <p class="card-text"><strong>@reward.CostPoints pts</strong></p>
                             <button class="btn btn-warning btn-sm" @onclick="() => RedeemReward(reward)"
-                                    disabled="@(currentFamilyMember == null || currentFamilyMember.PointsBalance < reward.CostPoints)">
-                                @(currentFamilyMember != null && currentFamilyMember.PointsBalance >= reward.CostPoints
+                                    disabled="@(currentFamilyMember == null || (currentFamilyMember.PointsBalance ?? 0) < reward.CostPoints)">
+                                @((currentFamilyMember != null && (currentFamilyMember.PointsBalance ?? 0) >= reward.CostPoints)
                                     ? "Redeem"
                                     : "Not enough points")
                             </button>
@@ -151,15 +151,16 @@ else
         message = string.Empty;
         errorMessage = string.Empty;
 
-        if (currentFamilyMember == null || currentFamilyMember.PointsBalance < reward.CostPoints)
+        if (currentFamilyMember == null || (currentFamilyMember.PointsBalance ?? 0) < reward.CostPoints)
         {
             errorMessage = "Not enough points to redeem this reward.";
             return;
         }
 
         var token = AuthService.CurrentSession?.AccessToken ?? string.Empty;
-        currentFamilyMember.PointsBalance -= reward.CostPoints;
-        await RewardService.UpdatePointsAsync(currentFamilyMember.FamilyMemberId, currentFamilyMember.PointsBalance, token);
-        message = $"You redeemed '{reward.Name}' for {reward.CostPoints} pts! Remaining: {currentFamilyMember.PointsBalance} pts";
+        var updatedPoints = (currentFamilyMember.PointsBalance ?? 0) - reward.CostPoints;
+        currentFamilyMember.PointsBalance = updatedPoints;
+        await RewardService.UpdatePointsAsync(currentFamilyMember.FamilyMemberId, updatedPoints, token);
+        message = $"You redeemed '{reward.Name}' for {reward.CostPoints} pts! Remaining: {updatedPoints} pts";
     }
 }

@@ -35,6 +35,76 @@ public sealed class RewardService
         var rows = await response.Content.ReadFromJsonAsync<List<RewardRow>>(JsonOptions, cancellationToken);
         return rows?.Select(FromRow).ToList() ?? new List<Reward>();
     }
+
+    public async Task<List<FamilyMember>> GetFamilyMembershipsAsync(string userId, string accessToken, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(accessToken))
+        {
+            return new List<FamilyMember>();
+        }
+
+        var endpoint = BuildEndpoint($"/rest/v1/family_members?user_id=eq.{Uri.EscapeDataString(userId)}&select=family_member_id,family_id,user_id,role,joined_at,points_balance");
+        using var request = CreateRequest(HttpMethod.Get, endpoint, accessToken);
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Failed to get family memberships for {UserId}. HTTP {StatusCode}", userId, (int)response.StatusCode);
+            return new List<FamilyMember>();
+        }
+
+        var rows = await response.Content.ReadFromJsonAsync<List<FamilyMember>>(JsonOptions, cancellationToken);
+        return rows ?? new List<FamilyMember>();
+    }
+
+    public async Task<(string FamilyId, string FamilyName, string CreatedByUserId)?> GetFamilySummaryAsync(string familyId, string accessToken, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(familyId) || string.IsNullOrWhiteSpace(accessToken))
+        {
+            return null;
+        }
+
+        var endpoint = BuildEndpoint($"/rest/v1/families?family_id=eq.{Uri.EscapeDataString(familyId)}&select=family_id,family_name,created_by_user_id&limit=1");
+        using var request = CreateRequest(HttpMethod.Get, endpoint, accessToken);
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Failed to get family summary for {FamilyId}. HTTP {StatusCode}", familyId, (int)response.StatusCode);
+            return null;
+        }
+
+        var rows = await response.Content.ReadFromJsonAsync<List<FamilySummaryRow>>(JsonOptions, cancellationToken);
+        if (rows is null || rows.Count == 0)
+        {
+            return null;
+        }
+
+        var row = rows[0];
+        return (row.FamilyId, row.FamilyName, row.CreatedByUserId);
+    }
+
+    public async Task<List<FamilyMember>> GetFamilyMembershipsByFamilyIdAsync(string familyId, string accessToken, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(familyId) || string.IsNullOrWhiteSpace(accessToken))
+        {
+            return new List<FamilyMember>();
+        }
+
+        var endpoint = BuildEndpoint($"/rest/v1/family_members?family_id=eq.{Uri.EscapeDataString(familyId)}&select=family_member_id,family_id,user_id,role,joined_at,points_balance");
+        using var request = CreateRequest(HttpMethod.Get, endpoint, accessToken);
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Failed to get family memberships for family {FamilyId}. HTTP {StatusCode}", familyId, (int)response.StatusCode);
+            return new List<FamilyMember>();
+        }
+
+        var rows = await response.Content.ReadFromJsonAsync<List<FamilyMember>>(JsonOptions, cancellationToken);
+        return rows ?? new List<FamilyMember>();
+    }
+
     public async Task<string?> GetFamilyIdAsync(string userId, string accessToken, CancellationToken cancellationToken = default)
     {
         var endpoint = BuildEndpoint($"/rest/v1/family_members?user_id=eq.{Uri.EscapeDataString(userId)}&select=family_id&limit=1");
@@ -52,6 +122,18 @@ public sealed class RewardService
     {
         [JsonPropertyName("family_id")]
         public string FamilyId { get; set; } = string.Empty;
+    }
+
+    private sealed class FamilySummaryRow
+    {
+        [JsonPropertyName("family_id")]
+        public string FamilyId { get; set; } = string.Empty;
+
+        [JsonPropertyName("family_name")]
+        public string FamilyName { get; set; } = string.Empty;
+
+        [JsonPropertyName("created_by_user_id")]
+        public string CreatedByUserId { get; set; } = string.Empty;
     }
 
     public async Task<FamilyMember?> GetFamilyMemberAsync(string userId, string accessToken, CancellationToken cancellationToken = default)
