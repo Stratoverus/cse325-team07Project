@@ -58,3 +58,33 @@ h1:focus {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
+
+.google-btn {
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.625rem 0.875rem;
+    border: 1px solid #dadce0;
+    border-radius: 0.375rem;
+    background-color: #ffffff;
+    color: #3c4043;
+    font-weight: 500;
+    line-height: 1.2;
+}
+
+.google-btn:hover:not(:disabled) {
+    background-color: #f8f9fa;
+    border-color: #c6c6c6;
+}
+
+.google-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.google-icon {
+    width: 18px;
+    height: 18px;
+}

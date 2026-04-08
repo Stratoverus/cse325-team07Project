@@ -5,40 +5,61 @@
 
 <PageTitle>Sign Up</PageTitle>
 
-<h3>Create account</h3>
+<section class="signup-shell container">
+    <div class="row justify-content-center w-100">
+        <div class="col-12 col-sm-10 col-md-8 col-lg-6 col-xl-5">
+            <div class="signup-card">
+                <h3 class="signup-title">Create account</h3>
 
-<EditForm Model="this" OnValidSubmit="HandleSignupAsync" FormName="SignupForm">
-    <DataAnnotationsValidator />
+                <div class="mb-3">
+                    <button type="button" class="google-btn" @onclick="HandleGoogleSignUpAsync" disabled="@isLoading">
+                        <img class="google-icon" src="https://developers.google.com/identity/images/g-logo.png" alt="Google logo" />
+                        Sign up with Google
+                    </button>
+                </div>
 
-    <div class="mb-3">
-        <label class="form-label">Email</label>
-        <InputText @bind-Value="email" class="form-control" />
+                <div class="d-flex align-items-center mb-3">
+                    <hr class="flex-grow-1" />
+                    <span class="px-2 text-muted">or</span>
+                    <hr class="flex-grow-1" />
+                </div>
+
+                <EditForm Model="this" OnValidSubmit="HandleSignupAsync" FormName="SignupForm">
+                    <DataAnnotationsValidator />
+
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <InputText @bind-Value="email" class="form-control" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Password</label>
+                        <InputText @bind-Value="password" type="password" class="form-control" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Confirm Password</label>
+                        <InputText @bind-Value="confirmPassword" type="password" class="form-control" />
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100" disabled="@isLoading">
+                        @(isLoading ? "Creating account..." : "Sign Up")
+                    </button>
+                </EditForm>
+
+                @if (!string.IsNullOrWhiteSpace(message))
+                {
+                    <p class="mt-3 @(isError ? "text-danger" : "text-success")">@message</p>
+                }
+
+                <p class="mt-3 mb-0 text-center">
+                    Already have an account?
+                    <NavLink href="/login">Sign in</NavLink>
+                </p>
+            </div>
+        </div>
     </div>
-
-    <div class="mb-3">
-        <label class="form-label">Password</label>
-        <InputText @bind-Value="password" type="password" class="form-control" />
-    </div>
-
-    <div class="mb-3">
-        <label class="form-label">Confirm Password</label>
-        <InputText @bind-Value="confirmPassword" type="password" class="form-control" />
-    </div>
-
-    <button type="submit" class="btn btn-primary" disabled="@isLoading">
-        @(isLoading ? "Creating account..." : "Sign Up")
-    </button>
-</EditForm>
-
-@if (!string.IsNullOrWhiteSpace(message))
-{
-    <p class="mt-3 @(isError ? "text-danger" : "text-success")">@message</p>
-}
-
-<p class="mt-3">
-    Already have an account?
-    <NavLink href="/login">Sign in</NavLink>
-</p>
+</section>
 
 @code {
     private string email = string.Empty;
@@ -98,6 +119,23 @@
         finally
         {
             isLoading = false;
+        }
+    }
+
+    private async Task HandleGoogleSignUpAsync()
+    {
+        var redirectUrl = Navigation.ToAbsoluteUri("/").ToString().TrimEnd('/');
+        var callbackUrl = $"{redirectUrl}/auth/callback";
+        var oauthUrl = AuthService.GetOAuthSignInUrl("google", callbackUrl);
+        
+        if (!string.IsNullOrWhiteSpace(oauthUrl))
+        {
+            Navigation.NavigateTo(oauthUrl, forceLoad: true);
+        }
+        else
+        {
+            isError = true;
+            message = "Unable to initiate Google sign-up. Please check your configuration.";
         }
     }
 

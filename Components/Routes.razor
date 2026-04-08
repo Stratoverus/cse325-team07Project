@@ -1,4 +1,6 @@
-﻿<Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+﻿@inject TaskDone.Services.SupabaseAuthService AuthService
+
+<Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
     <Found Context="routeData">
         <ErrorBoundary>
             <ChildContent>
@@ -16,3 +18,18 @@
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
 </Router>
+
+@code {
+    private bool _sessionRestoreCompleted;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_sessionRestoreCompleted)
+        {
+            return;
+        }
+
+        _sessionRestoreCompleted = await AuthService.EnsureSessionRestoredAsync();
+        StateHasChanged();
+    }
+}

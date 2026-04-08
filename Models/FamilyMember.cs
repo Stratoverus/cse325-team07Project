@@ -28,5 +28,5 @@ public sealed class FamilyMember : BaseModel
 
     [Column("points_balance")]
     [JsonPropertyName("points_balance")]
-    public int PointsBalance { get; set; } = 0;
+    public int? PointsBalance { get; set; }
 }

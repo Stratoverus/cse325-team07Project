@@ -1,0 +1,173 @@
+@page "/auth/callback"
+@rendermode InteractiveServer
+@inject TaskDone.Services.SupabaseAuthService AuthService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Completing sign in...</PageTitle>
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="text-center">
+                <div class="spinner-border" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-3">Completing your sign in...</p>
+                @if (!string.IsNullOrWhiteSpace(errorMessage))
+                {
+                    <p class="text-danger mt-3">@errorMessage</p>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string? errorMessage;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                var uri = Navigation.Uri;
+                var hashIndex = uri.IndexOf('#');
+                
+                if (hashIndex < 0 || hashIndex == uri.Length - 1)
+                {
+                    errorMessage = "No authentication data received. Please try signing in again.";
+                    StateHasChanged();
+                    return;
+                }
+
+                var hashFragment = uri.Substring(hashIndex + 1);
+                var sessionData = ParseHashFragment(hashFragment);
+
+                if (string.IsNullOrWhiteSpace(sessionData["access_token"]))
+                {
+                    var error = sessionData.ContainsKey("error_description") 
+                        ? sessionData["error_description"] 
+                        : sessionData.ContainsKey("error") 
+                            ? sessionData["error"] 
+                            : "Authentication failed";
+                    
+                    errorMessage = $"Authentication error: {error}";
+                    StateHasChanged();
+                    return;
+                }
+
+                var session = new TaskDone.Models.SupabaseSession
+                {
+                    AccessToken = sessionData["access_token"],
+                    TokenType = sessionData.GetValueOrDefault("token_type", "bearer"),
+                    ExpiresIn = int.TryParse(sessionData.GetValueOrDefault("expires_in"), out var expiresIn) ? expiresIn : 3600,
+                    RefreshToken = sessionData.GetValueOrDefault("refresh_token", "")
+                };
+
+                session.User = await GetUserFromTokenAsync(session.AccessToken);
+
+                if (session.User == null || string.IsNullOrWhiteSpace(session.User.Email) || string.IsNullOrWhiteSpace(session.User.Id))
+                {
+                    errorMessage = "Unable to retrieve user information. Please try signing in again.";
+                    StateHasChanged();
+                    return;
+                }
+
+                await AuthService.SetSessionAsync(session);
+                await AuthService.EnsureAppUserRecordAsync(session.User.Id, session.User.Email, session.AccessToken);
+                Navigation.NavigateTo("/profile", forceLoad: false);
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"An error occurred during sign in: {ex.Message}";
+                StateHasChanged();
+            }
+        }
+    }
+
+    private Dictionary<string, string> ParseHashFragment(string hash)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        if (hash.StartsWith("#"))
+        {
+            hash = hash.Substring(1);
+        }
+
+        var parameters = hash.Split('&');
+        foreach (var param in parameters)
+        {
+            var parts = param.Split('=');
+            if (parts.Length == 2)
+            {
+                var key = Uri.UnescapeDataString(parts[0]);
+                var value = Uri.UnescapeDataString(parts[1]);
+                result[key] = value;
+            }
+        }
+
+        return result;
+    }
+
+    private async Task<TaskDone.Models.SupabaseUser?> GetUserFromTokenAsync(string accessToken)
+    {
+        try
+        {
+            return ExtractUserInfoFromJWT(accessToken);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private TaskDone.Models.SupabaseUser? ExtractUserInfoFromJWT(string jwt)
+    {
+        try
+        {
+            var parts = jwt.Split('.');
+            if (parts.Length < 2)
+            {
+                return null;
+            }
+
+            var payloadJson = DecodeBase64Url(parts[1]);
+            using var doc = System.Text.Json.JsonDocument.Parse(payloadJson);
+            
+            var root = doc.RootElement;
+            
+            var userId = root.TryGetProperty("sub", out var subElement) ? subElement.GetString() : null;
+            var email = root.TryGetProperty("email", out var emailElement) ? emailElement.GetString() : null;
+
+            if (!string.IsNullOrWhiteSpace(userId) && !string.IsNullOrWhiteSpace(email))
+            {
+                return new TaskDone.Models.SupabaseUser
+                {
+                    Id = userId,
+                    Email = email
+                };
+            }
+
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string DecodeBase64Url(string input)
+    {
+        var normalized = input.Replace('-', '+').Replace('_', '/');
+        var padding = 4 - (normalized.Length % 4);
+        if (padding is > 0 and < 4)
+        {
+            normalized = normalized.PadRight(normalized.Length + padding, '=');
+        }
+
+        var bytes = Convert.FromBase64String(normalized);
+        return System.Text.Encoding.UTF8.GetString(bytes);
+    }
+}
