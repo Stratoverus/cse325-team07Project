@@ -22,12 +22,7 @@ public sealed class UserProfileService
 
     public async Task<UserProfile?> GetProfileAsync(string userId, string accessToken, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(userId))
-        {
-            return null;
-        }
-
-        if (string.IsNullOrWhiteSpace(accessToken))
+        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(accessToken))
         {
             return null;
         }
@@ -36,14 +31,31 @@ public sealed class UserProfileService
         using var request = CreateRequest(HttpMethod.Get, endpoint, accessToken);
         using var response = await _httpClient.SendAsync(request, cancellationToken);
 
-        if (!response.IsSuccessStatusCode)
+        if (response.IsSuccessStatusCode)
+        {
+            var profiles = await response.Content.ReadFromJsonAsync<List<SupabaseUserProfileRow>>(JsonOptions, cancellationToken);
+            if (profiles?.Count > 0)
+            {
+                return FromRow(profiles[0]);
+            }
+        }
+        else
         {
             _logger.LogWarning("Failed to get profile for {UserId}. HTTP {StatusCode}", userId, (int)response.StatusCode);
+        }
+
+        var fallbackEndpoint = BuildEndpoint($"/rest/v1/user_profiles?id=eq.{Uri.EscapeDataString(userId)}&select=*");
+        using var fallbackRequest = CreateRequest(HttpMethod.Get, fallbackEndpoint, accessToken);
+        using var fallbackResponse = await _httpClient.SendAsync(fallbackRequest, cancellationToken);
+
+        if (!fallbackResponse.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Failed to get profile for {UserId} using id field. HTTP {StatusCode}", userId, (int)fallbackResponse.StatusCode);
             return null;
         }
 
-        var profiles = await response.Content.ReadFromJsonAsync<List<SupabaseUserProfileRow>>(JsonOptions, cancellationToken);
-        return profiles?.Count > 0 ? FromRow(profiles[0]) : null;
+        var fallbackProfiles = await fallbackResponse.Content.ReadFromJsonAsync<List<SupabaseUserProfileRow>>(JsonOptions, cancellationToken);
+        return fallbackProfiles?.Count > 0 ? FromRow(fallbackProfiles[0]) : null;
     }
 
     public async Task<UserProfile> SaveProfileAsync(UserProfile profile, string accessToken, CancellationToken cancellationToken = default)
@@ -123,6 +135,7 @@ public sealed class UserProfileService
         {
             UserId = profile.UserId,
             Email = profile.Email,
+            FirstName = profile.FirstName,
             FullName = profile.FullName,
             Age = profile.Age,
             PreferredDisplayName = profile.PreferredDisplayName,
@@ -139,6 +152,7 @@ public sealed class UserProfileService
         {
             UserId = row.UserId,
             Email = row.Email,
+            FirstName = row.FirstName,
             FullName = row.FullName,
             Age = row.Age,
             PreferredDisplayName = row.PreferredDisplayName,
@@ -170,6 +184,9 @@ public sealed class UserProfileService
 
         [JsonPropertyName("preferred_display_name")]
         public string PreferredDisplayName { get; set; } = string.Empty;
+
+        [JsonPropertyName("first_name")]
+        public string FirstName { get; set; } = string.Empty;
 
         [JsonPropertyName("time_zone")]
         public string TimeZone { get; set; } = string.Empty;
