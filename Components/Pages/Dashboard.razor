@@ -11,6 +11,7 @@
 @inject SupabaseAuthService AuthService
 @inject UserProfileService UserProfileService
 @inject RewardService RewardService
+@inject Supabase.Client SupabaseClient
 
 <h3>Dashboard</h3>
 
@@ -95,24 +96,38 @@ else
                         @if (editingTask == task)
                         {
                             <td><InputText class="form-control" @bind-Value="tempTask.Title" /></td>
-                            <td><InputText class="form-control" @bind-Value="tempTask.AssignedTo" /></td>
+                            <td>
+                                <InputSelect class="form-select" @bind-Value="tempTask.AssignedToUserId">
+                                    <option value="">Select Assignee...</option>
+                                    @foreach (var kvp in assigneeNamesMap)
+                                    {
+                                        <option value="@kvp.Key">@kvp.Value</option>
+                                    }
+                                </InputSelect>
+                            </td>
                             <td>@(task.IsDone ? "Completed" : "Pending")</td>
                             <td><InputDate class="form-control" @bind-Value="tempTask.DueDate" /></td>
                             <td>
-                                <button class="btn btn-sm btn-success" @onclick="SaveEdit">Save</button>
-                                <button class="btn btn-sm btn-secondary ms-2" @onclick="CancelEdit">Cancel</button>
+                                <button class="btn btn-sm btn-success" @onclick="SaveEdit" disabled="@isSavingEdit">
+                                    @if (isSavingEdit)
+                                    {
+                                        <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                    }
+                                    Save
+                                </button>
+                                <button class="btn btn-sm btn-secondary ms-2" @onclick="CancelEdit" disabled="@isSavingEdit">Cancel</button>
                             </td>
                         }
                         else
                         {
                             <td>@task.Title</td>
-                            <td>@task.AssignedTo</td>
+                            <td>@(task.AssignedToUserId != null && assigneeNamesMap.TryGetValue(task.AssignedToUserId, out var n) ? n : (task.AssignedToUserId ?? "Unassigned"))</td>
                             <td>
                                 @if (task.IsDone)
                                 {
                                     <span class="badge bg-success">Completed</span>
                                 }
-                                else if (task.AcceptedByChild)
+                                else if (task.IsAccepted)
                                 {
                                     <span class="badge bg-primary">In Progress</span>
                                 }
@@ -123,9 +138,15 @@ else
                             </td>
                             <td>@(task.DueDate?.ToShortDateString() ?? "No due date")</td>
                             <td>
-                                @if (!task.AcceptedByChild)
+                                @if (!task.IsAccepted)
                                 {
-                                    <button class="btn btn-sm btn-outline-primary" @onclick="() => AcceptTask(task)">Accept</button>
+                                    <button class="btn btn-sm btn-outline-primary" @onclick="() => AcceptTaskAsync(task)" disabled="@(processingTaskId == task.TaskId)">
+                                        @if (processingTaskId == task.TaskId)
+                                        {
+                                            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                        }
+                                        Accept
+                                    </button>
                                 }
                                 else if (!task.IsDone)
                                 {
@@ -152,8 +173,14 @@ else
             <div class="card-body">
                 <h6 class="card-title">Update notes — @updatingNotesTask.Title</h6>
                 <textarea class="form-control mb-2" rows="3" @bind="updatingNotesTask.Notes" placeholder="Add a progress note..."></textarea>
-                <button class="btn btn-sm btn-warning" @onclick="SaveNotes">Save Notes</button>
-                <button class="btn btn-sm btn-secondary ms-2" @onclick="CancelNotes">Cancel</button>
+                <button class="btn btn-sm btn-warning" @onclick="SaveNotes" disabled="@isSavingNotes">
+                    @if (isSavingNotes)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                    }
+                    Save Notes
+                </button>
+                <button class="btn btn-sm btn-secondary ms-2" @onclick="CancelNotes" disabled="@isSavingNotes">Cancel</button>
             </div>
         </div>
     }
@@ -205,10 +232,14 @@ else
     private string announcementMessage = string.Empty;
     private string newAnnouncementMessage = string.Empty;
     private bool isPostingAnnouncement = false;
+    private string processingTaskId = string.Empty;
+    private bool isSavingNotes = false;
+    private bool isSavingEdit = false;
     private List<Announcement> announcements = new();
     private string familyId = string.Empty;
     private FamilyMember? currentFamilyMember = null;
     private string? requestedFamilyId;
+    private Dictionary<string, string> assigneeNamesMap = new();
 
     protected override async Task OnParametersSetAsync()
     {
@@ -233,6 +264,11 @@ else
         var userId = AuthService.CurrentUserId;
         var token = AuthService.CurrentSession?.AccessToken ?? string.Empty;
 
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            try { await SupabaseClient.Auth.SetSession(token, AuthService.CurrentSession?.RefreshToken ?? string.Empty); } catch { }
+        }
+
         currentProfile = await UserProfileService.GetProfileAsync(userId, token);
         var memberships = await RewardService.GetFamilyMembershipsAsync(userId, token);
 
@@ -254,21 +290,64 @@ else
         {
             visibleTasks = Enumerable.Empty<TaskItem>();
             announcements = new List<Announcement>();
+            assigneeNamesMap.Clear();
             return;
         }
 
-        visibleTasks = TaskService.GetTasksByFamilyId(familyId);
+        try 
+        {
+            var result = await SupabaseClient.From<TaskItem>().Where(x => x.FamilyId == familyId).Get();
+            visibleTasks = result.Models;
+        } 
+        catch 
+        {
+            visibleTasks = new List<TaskItem>();
+        }
         announcements = await AnnouncementService.GetAnnouncementsByFamilyIdAsync(familyId);
+
+        var familyMemberships = await RewardService.GetFamilyMembershipsByFamilyIdAsync(familyId, token);
+        assigneeNamesMap.Clear();
+        foreach(var member in familyMemberships)
+        {
+            if(!string.IsNullOrWhiteSpace(member.UserId))
+            {
+                var profile = await UserProfileService.GetProfileAsync(member.UserId, token);
+                var displayName = profile is null
+                    ? member.UserId
+                    : !string.IsNullOrWhiteSpace(profile.PreferredDisplayName)
+                        ? profile.PreferredDisplayName
+                        : !string.IsNullOrWhiteSpace(profile.FullName)
+                            ? profile.FullName
+                            : profile.Email;
+                assigneeNamesMap[member.UserId] = displayName;
+            }
+        }
     }
 
-    private async Task AcceptTask(TaskItem task)
+    private async Task AcceptTaskAsync(TaskItem task)
     {
-        if (task == null)
-            return;
-
-        task.AcceptedByChild = true;
-        TaskService.UpdateTask(task);
+        if (task == null) return;
+        
+        processingTaskId = task.TaskId;
+        
+        try
+        {
+            await SupabaseClient.From<TaskItem>()
+                .Where(x => x.TaskId == task.TaskId)
+                .Set(x => x.IsAccepted, true)
+                .Update();
+                
+            task.IsAccepted = true;
+            TaskService.UpdateTask(task);
+            pointsMessage = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            pointsMessage = $"Error accepting task: {ex.Message}";
+        }
+        
         await LoadDataAsync();
+        processingTaskId = string.Empty;
     }
 
     private async Task MarkComplete(TaskItem task)
@@ -276,14 +355,24 @@ else
         if (task == null)
             return;
 
-        TaskService.ToggleDone(task);
+        task.IsDone = true;
+        try
+        {
+            await SupabaseClient.From<TaskItem>()
+                .Where(x => x.TaskId == task.TaskId)
+                .Set(x => x.IsDone, true)
+                .Set(x => x.UpdatedAt, DateTime.UtcNow)
+                .Update();
+        }
+        catch(Exception) {}
 
         if (task.IsDone && currentFamilyMember != null)
         {
-            var updatedPoints = (currentFamilyMember.PointsBalance ?? 0) + task.PointValue;
+            var pointValue = task.PointValue ?? 0;
+            var updatedPoints = (currentFamilyMember.PointsBalance ?? 0) + pointValue;
             currentFamilyMember.PointsBalance = updatedPoints;
             await RewardService.UpdatePointsAsync(currentFamilyMember.FamilyMemberId, updatedPoints, AuthService.CurrentSession?.AccessToken ?? string.Empty);
-            pointsMessage = $"You earned {task.PointValue} points! Total: {updatedPoints}";
+            pointsMessage = $"You earned {pointValue} points! Total: {updatedPoints}";
         }
         else
         {
@@ -298,7 +387,17 @@ else
         if (task == null)
             return;
 
-        TaskService.ToggleDone(task);
+        task.IsDone = !task.IsDone;
+        try
+        {
+            await SupabaseClient.From<TaskItem>()
+                .Where(x => x.TaskId == task.TaskId)
+                .Set(x => x.IsDone, task.IsDone)
+                .Set(x => x.UpdatedAt, DateTime.UtcNow)
+                .Update();
+        }
+        catch(Exception) {}
+        
         pointsMessage = string.Empty;
         await LoadDataAsync();
     }
@@ -308,7 +407,14 @@ else
         if (task == null)
             return;
 
-        TaskService.RemoveTask(task);
+        try
+        {
+            await SupabaseClient.From<TaskItem>()
+                .Where(x => x.TaskId == task.TaskId)
+                .Delete();
+        }
+        catch (Exception) {}
+        
         await LoadDataAsync();
     }
 
@@ -320,11 +426,10 @@ else
             TaskId = task.TaskId,
             FamilyId = task.FamilyId,
             Title = task.Title,
-            AssignedTo = task.AssignedTo,
+            AssignedToUserId = task.AssignedToUserId,
             DueDate = task.DueDate,
             Notes = task.Notes,
-            IsDone = task.IsDone,
-            AcceptedByChild = task.AcceptedByChild
+            IsDone = task.IsDone
         };
     }
 
@@ -333,16 +438,23 @@ else
         if (editingTask == null)
             return;
 
+        isSavingEdit = true;
         editingTask.Title = tempTask.Title;
-        editingTask.AssignedTo = tempTask.AssignedTo;
+        editingTask.AssignedToUserId = tempTask.AssignedToUserId;
         editingTask.DueDate = tempTask.DueDate;
         editingTask.Notes = tempTask.Notes;
         editingTask.IsDone = tempTask.IsDone;
-        editingTask.AcceptedByChild = tempTask.AcceptedByChild;
+        editingTask.UpdatedAt = DateTime.UtcNow;
 
-        TaskService.UpdateTask(editingTask);
+        try
+        {
+            await SupabaseClient.From<TaskItem>().Update(editingTask);
+        }
+        catch (Exception) {}
+
         editingTask = null;
         await LoadDataAsync();
+        isSavingEdit = false;
     }
 
     private void CancelEdit()
@@ -360,9 +472,18 @@ else
         if (updatingNotesTask == null)
             return;
 
-        TaskService.UpdateTask(updatingNotesTask);
+        isSavingNotes = true;
+
+        updatingNotesTask.UpdatedAt = DateTime.UtcNow;
+        try
+        {
+            await SupabaseClient.From<TaskItem>().Update(updatingNotesTask);
+        }
+        catch (Exception) {}
+
         updatingNotesTask = null;
         await LoadDataAsync();
+        isSavingNotes = false;
     }
 
     private void CancelNotes()

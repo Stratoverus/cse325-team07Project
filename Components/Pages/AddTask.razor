@@ -10,6 +10,7 @@
 @inject UserProfileService UserProfileService
 @inject RewardService RewardService
 @inject NavigationManager Navigation
+@inject Supabase.Client SupabaseClient
 
 <h3>Add New Task</h3>
 
@@ -92,7 +93,7 @@ else
                 {
                     <tr>
                         <td>@task.Title</td>
-                        <td>@task.AssignedTo</td>
+                        <td>@(task.AssignedToUserId != null ? (assigneeOptions.FirstOrDefault(a => a.UserId == task.AssignedToUserId)?.DisplayName ?? task.AssignedToUserId) : "Unassigned")</td>
                         <td>@(task.DueDate?.ToShortDateString() ?? "No due date")</td>
                         <td>@(task.IsDone ? "Completed" : "Pending")</td>
                     </tr>
@@ -134,6 +135,11 @@ else
         var userId = AuthService.CurrentUserId;
         var token = AuthService.CurrentSession?.AccessToken ?? string.Empty;
 
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            try { await SupabaseClient.Auth.SetSession(token, AuthService.CurrentSession?.RefreshToken ?? string.Empty); } catch { }
+        }
+
         currentProfile = await UserProfileService.GetProfileAsync(userId, token);
         var memberships = await RewardService.GetFamilyMembershipsAsync(userId, token);
 
@@ -152,7 +158,15 @@ else
 
         if (!string.IsNullOrWhiteSpace(familyId))
         {
-            currentTasks = TaskService.GetTasksByFamilyId(familyId).ToList();
+            try
+            {
+                var result = await SupabaseClient.From<TaskItem>().Where(x => x.FamilyId == familyId).Get();
+                currentTasks = result.Models;
+            }
+            catch
+            {
+                currentTasks = new List<TaskItem>();
+            }
             await LoadAssigneeOptionsAsync(familyId, token);
         }
         else
@@ -204,13 +218,27 @@ else
             return;
         }
 
-        newTask.AssignedTo = selectedAssignee.DisplayName;
+        newTask.AssignedToUserId = selectedAssignee.UserId;
+        newTask.CreatedByUserId = AuthService.CurrentUserId ?? string.Empty;
+        
+        var now = DateTime.UtcNow;
+        newTask.CreatedAt = now;
+        newTask.UpdatedAt = now;
+        newTask.IsAccepted = false;
 
-        TaskService.AddTask(newTask);
-        message = "Task added!";
+        try
+        {
+            await SupabaseClient.From<TaskItem>().Insert(newTask);
+            
+            message = "Task added!";
 
-        newTask = new TaskItem { DueDate = DateTime.Today, FamilyId = familyId };
-        await LoadTasksAsync();
+            newTask = new TaskItem { DueDate = DateTime.Today, FamilyId = familyId };
+            await LoadTasksAsync();
+        }
+        catch (Exception ex)
+        {
+            message = $"Error adding task to DB: {ex.Message}";
+        }
     }
 
     private void ClearForm()
