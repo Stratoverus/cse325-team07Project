@@ -23,7 +23,10 @@
 else
 {
     <div class="mb-3 d-flex gap-2">
-        <NavLink class="btn btn-success" href="@GetAddTaskUrl()">Add New Task</NavLink>
+        @if (currentFamilyMember != null && string.Equals(currentFamilyMember.Role, "parent", StringComparison.OrdinalIgnoreCase))
+        {
+            <NavLink class="btn btn-success" href="@GetAddTaskUrl()">Add New Task</NavLink>
+        }
         <NavLink class="btn btn-outline-secondary" href="@GetProfileUrl()">Back to Profile</NavLink>
         <button type="button" class="btn btn-outline-danger" @onclick="HandleLogoutAsync">Logout</button>
     </div>
