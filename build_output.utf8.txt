@@ -1,0 +1,21 @@
+﻿  Determinando los proyectos que se van a restaurar...
+C:\Users\menji\Desktop\cse325-team07Project\TaskDone.csproj : warning NU1902: Package 'Microsoft.IdentityModel.JsonWebTokens' 7.0.3 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-59j7-ghrg-fj52
+C:\Users\menji\Desktop\cse325-team07Project\TaskDone.csproj : warning NU1902: Package 'System.IdentityModel.Tokens.Jwt' 7.0.3 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-59j7-ghrg-fj52
+  Todos los proyectos est├ín actualizados para la restauraci├│n.
+C:\Users\menji\Desktop\cse325-team07Project\TaskDone.csproj : warning NU1902: Package 'Microsoft.IdentityModel.JsonWebTokens' 7.0.3 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-59j7-ghrg-fj52
+C:\Users\menji\Desktop\cse325-team07Project\TaskDone.csproj : warning NU1902: Package 'System.IdentityModel.Tokens.Jwt' 7.0.3 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-59j7-ghrg-fj52
+C:\Users\menji\Desktop\cse325-team07Project\Components\Pages\AddTask.razor(210,35): warning CS8601: Posible asignaci├│n de referencia nula. [C:\Users\menji\Desktop\cse325-team07Project\TaskDone.csproj]
+C:\Users\menji\Desktop\cse325-team07Project\Components\Pages\Dashboard.razor(285,87): error CS1503: Argumento 2: no se puede convertir de 'int?' a 'int' [C:\Users\menji\Desktop\cse325-team07Project\TaskDone.csproj]
+
+ERROR al compilar.
+
+C:\Users\menji\Desktop\cse325-team07Project\TaskDone.csproj : warning NU1902: Package 'Microsoft.IdentityModel.JsonWebTokens' 7.0.3 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-59j7-ghrg-fj52
+C:\Users\menji\Desktop\cse325-team07Project\TaskDone.csproj : warning NU1902: Package 'System.IdentityModel.Tokens.Jwt' 7.0.3 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-59j7-ghrg-fj52
+C:\Users\menji\Desktop\cse325-team07Project\TaskDone.csproj : warning NU1902: Package 'Microsoft.IdentityModel.JsonWebTokens' 7.0.3 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-59j7-ghrg-fj52
+C:\Users\menji\Desktop\cse325-team07Project\TaskDone.csproj : warning NU1902: Package 'System.IdentityModel.Tokens.Jwt' 7.0.3 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-59j7-ghrg-fj52
+C:\Users\menji\Desktop\cse325-team07Project\Components\Pages\AddTask.razor(210,35): warning CS8601: Posible asignaci├│n de referencia nula. [C:\Users\menji\Desktop\cse325-team07Project\TaskDone.csproj]
+C:\Users\menji\Desktop\cse325-team07Project\Components\Pages\Dashboard.razor(285,87): error CS1503: Argumento 2: no se puede convertir de 'int?' a 'int' [C:\Users\menji\Desktop\cse325-team07Project\TaskDone.csproj]
+    5 Advertencia(s)
+    1 Errores
+
+Tiempo transcurrido 00:00:02.83
