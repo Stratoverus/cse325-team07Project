@@ -1,4 +1,6 @@
 ﻿@inject TaskDone.Services.SupabaseAuthService AuthService
+@inject NavigationManager Navigation
+@implements IDisposable
 
 <Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
     <Found Context="routeData">
@@ -22,14 +24,43 @@
 @code {
     private bool _sessionRestoreCompleted;
 
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += HandleLocationChanged;
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_sessionRestoreCompleted)
+        await EnsureAndValidateSessionAsync();
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= HandleLocationChanged;
+    }
+
+    private async Task EnsureAndValidateSessionAsync()
+    {
+        if (!_sessionRestoreCompleted)
         {
-            return;
+            _sessionRestoreCompleted = await AuthService.EnsureSessionRestoredAsync();
+            if (!_sessionRestoreCompleted)
+            {
+                StateHasChanged();
+                return;
+            }
         }
 
-        _sessionRestoreCompleted = await AuthService.EnsureSessionRestoredAsync();
-        StateHasChanged();
+        var timedOut = await AuthService.CheckAndHandleInactivityTimeoutAsync();
+        if (timedOut)
+        {
+            Navigation.NavigateTo("/login", forceLoad: false);
+            return;
+        }
+    }
+
+    private void HandleLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        _ = InvokeAsync(EnsureAndValidateSessionAsync);
     }
 }

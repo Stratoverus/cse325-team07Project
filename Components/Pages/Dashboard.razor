@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 
 @using System.Linq
+@using Microsoft.AspNetCore.Components
 @using TaskDone.Services
 @using TaskDone.Models
 
@@ -12,7 +13,7 @@
 @inject UserProfileService UserProfileService
 @inject RewardService RewardService
 
-<h3>Dashboard</h3>
+<h3>@GetDashboardTitle()</h3>
 
 @if (!AuthService.IsAuthenticated)
 {
@@ -196,6 +197,9 @@ else
 }
 
 @code {
+    [SupplyParameterFromQuery(Name = "familyId")]
+    public string? FamilyIdQuery { get; set; }
+
     private TaskItem? editingTask = null;
     private TaskItem tempTask = new();
     private IEnumerable<TaskItem> visibleTasks = Enumerable.Empty<TaskItem>();
@@ -207,6 +211,7 @@ else
     private bool isPostingAnnouncement = false;
     private List<Announcement> announcements = new();
     private string familyId = string.Empty;
+    private string currentFamilyName = string.Empty;
     private FamilyMember? currentFamilyMember = null;
     private string? requestedFamilyId;
 
@@ -214,7 +219,9 @@ else
     {
         await AuthService.EnsureSessionRestoredAsync();
 
-        requestedFamilyId = GetRequestedFamilyId();
+        requestedFamilyId = string.IsNullOrWhiteSpace(FamilyIdQuery)
+            ? null
+            : FamilyIdQuery.Trim();
 
         await LoadDataAsync();
     }
@@ -227,6 +234,7 @@ else
             announcements = new List<Announcement>();
             currentProfile = null;
             familyId = string.Empty;
+            currentFamilyName = string.Empty;
             return;
         }
 
@@ -240,7 +248,7 @@ else
         if (!string.IsNullOrWhiteSpace(requestedFamilyId))
         {
             selectedMembership = memberships.FirstOrDefault(m =>
-                string.Equals(m.FamilyId, requestedFamilyId, StringComparison.Ordinal));
+                string.Equals(m.FamilyId?.Trim(), requestedFamilyId, StringComparison.OrdinalIgnoreCase));
         }
 
         selectedMembership ??= memberships
@@ -254,8 +262,12 @@ else
         {
             visibleTasks = Enumerable.Empty<TaskItem>();
             announcements = new List<Announcement>();
+            currentFamilyName = string.Empty;
             return;
         }
+
+        var familySummary = await RewardService.GetFamilySummaryAsync(familyId, token);
+        currentFamilyName = familySummary?.FamilyName ?? string.Empty;
 
         visibleTasks = TaskService.GetTasksByFamilyId(familyId);
         announcements = await AnnouncementService.GetAnnouncementsByFamilyIdAsync(familyId);
@@ -431,19 +443,6 @@ else
         Navigation.NavigateTo("/login", forceLoad: false);
     }
 
-    private string? GetRequestedFamilyId()
-    {
-        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
-        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
-
-        if (!query.TryGetValue("familyId", out var value) || string.IsNullOrWhiteSpace(value))
-        {
-            return null;
-        }
-
-        return value.ToString();
-    }
-
     private string GetAddTaskUrl()
     {
         if (string.IsNullOrWhiteSpace(familyId))
@@ -458,5 +457,12 @@ else
     {
         var userId = AuthService.CurrentUserId;
         return string.IsNullOrWhiteSpace(userId) ? "/profile" : $"/profile/{userId}";
+    }
+
+    private string GetDashboardTitle()
+    {
+        return string.IsNullOrWhiteSpace(currentFamilyName)
+            ? "Dashboard"
+            : currentFamilyName;
     }
 }
