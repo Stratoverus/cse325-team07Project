@@ -26,11 +26,17 @@
                     </NavLink>
                 </div>
 
+
                 @foreach (var dashboardLink in familyDashboardLinks)
                 {
                     <div class="nav-item px-3">
                         <NavLink class="nav-link" href="@dashboardLink.DashboardUrl">
                             <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> @dashboardLink.DisplayName
+                        </NavLink>
+                    </div>
+                    <div class="nav-item px-3 ps-4">
+                        <NavLink class="nav-link" href="@dashboardLink.RewardsUrl">
+                            <span class="bi bi-gift-fill-nav-menu" aria-hidden="true"></span> Rewards
                         </NavLink>
                     </div>
                 }
@@ -125,7 +131,7 @@
                 ? $"Family Dashboard {index + 1}"
                 : summary.Value.FamilyName;
 
-            familyDashboardLinks.Add(new FamilyDashboardLink(familyName, GetDashboardUrl(membership.FamilyId)));
+            familyDashboardLinks.Add(new FamilyDashboardLink(familyName, GetDashboardUrl(membership.FamilyId), GetRewardsUrl(membership.FamilyId)));
         }
     }
 
@@ -133,13 +139,16 @@
     {
         return $"/dashboard?familyId={Uri.EscapeDataString(familyId)}";
     }
-
+    private static string GetRewardsUrl(string familyId)
+    {
+        return $"/rewards?familyId={Uri.EscapeDataString(familyId)}";
+    }
     private string GetProfileUrl()
     {
         var userId = AuthService.CurrentUserId;
         return string.IsNullOrWhiteSpace(userId) ? "/profile" : $"/profile/{userId}";
     }
 
-    private sealed record FamilyDashboardLink(string DisplayName, string DashboardUrl);
+    private sealed record FamilyDashboardLink(string DisplayName, string DashboardUrl, string RewardsUrl);
 }
 

@@ -7,6 +7,7 @@
 @inject TaskDone.Services.SupabaseAuthService AuthService
 @inject TaskDone.Services.UserProfileService UserProfileService
 @inject TaskDone.Services.RewardService RewardService
+@inject NavigationManager Navigation
 
 <h3>Rewards</h3>
 
@@ -99,14 +100,24 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        var familyIdFromUrl = query["familyId"];
+
         var userId = AuthService.CurrentUserId;
         var token = AuthService.CurrentSession?.AccessToken;
 
         if (!string.IsNullOrWhiteSpace(userId) && !string.IsNullOrWhiteSpace(token))
         {
             currentProfile = await UserProfileService.GetProfileAsync(userId, token);
-            familyId = await RewardService.GetFamilyIdAsync(userId, token) ?? string.Empty;
-            currentFamilyMember = await RewardService.GetFamilyMemberAsync(userId, token);
+
+            var memberships = await RewardService.GetFamilyMembershipsAsync(userId, token);
+            var membership = string.IsNullOrWhiteSpace(familyIdFromUrl)
+                ? memberships.FirstOrDefault()
+                : memberships.FirstOrDefault(m => m.FamilyId == familyIdFromUrl);
+
+            currentFamilyMember = membership;
+            familyId = membership?.FamilyId ?? string.Empty;
 
             if (!string.IsNullOrWhiteSpace(familyId))
             {
