@@ -55,11 +55,10 @@ public class TaskService
             return;
 
         existing.Title = task.Title;
-        existing.AssignedTo = task.AssignedTo;
+        existing.AssignedToUserId = task.AssignedToUserId;
         existing.DueDate = task.DueDate;
         existing.Notes = task.Notes;
         existing.IsDone = task.IsDone;
-        existing.AcceptedByChild = task.AcceptedByChild;
     }
 
     public void RemoveTask(TaskItem task)
