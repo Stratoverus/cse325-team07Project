@@ -19,7 +19,9 @@ public sealed class SupabaseAuthService
     private bool _restoreAttempted;
 
     private const string SessionStorageKey = "taskdone.auth.session.v1";
+    private const string LastActivityStorageKey = "taskdone.auth.last-activity-utc.v1";
     private const string InvalidSupabaseUrlMessage = "Supabase URL is invalid. Configure SUPABASE_URL as a full URL such as https://your-project.supabase.co.";
+    private static readonly TimeSpan InactivityTimeout = TimeSpan.FromMinutes(30);
 
     public SupabaseSession? CurrentSession { get; private set; }
 
@@ -138,6 +140,28 @@ public sealed class SupabaseAuthService
         CurrentSession = session;
         await PersistSessionAsync(CurrentSession, cancellationToken);
         NotifyAuthStateChanged();
+    }
+
+    public async Task<bool> CheckAndHandleInactivityTimeoutAsync(CancellationToken cancellationToken = default)
+    {
+        if (!IsAuthenticated)
+        {
+            return false;
+        }
+
+        var lastActivity = await TryGetLastActivityUtcAsync(cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+
+        if (lastActivity.HasValue && now - lastActivity.Value > InactivityTimeout)
+        {
+            CurrentSession = null;
+            await ClearPersistedSessionAsync();
+            NotifyAuthStateChanged();
+            return true;
+        }
+
+        await PersistLastActivityUtcAsync(now, cancellationToken);
+        return false;
     }
 
     public async Task EnsureAppUserRecordAsync(string userId, string email, string accessToken, CancellationToken cancellationToken = default)
@@ -335,6 +359,11 @@ public sealed class SupabaseAuthService
                 CurrentSession = restoredSession;
             }
 
+            if (CurrentSession is not null)
+            {
+                await CheckAndHandleInactivityTimeoutAsync(cancellationToken);
+            }
+
             _restoreAttempted = true;
             NotifyAuthStateChanged();
             return true;
@@ -457,6 +486,7 @@ public sealed class SupabaseAuthService
         {
             var json = JsonSerializer.Serialize(session, JsonOptions);
             await _jsRuntime.InvokeVoidAsync("localStorage.setItem", cancellationToken, SessionStorageKey, json);
+            await PersistLastActivityUtcAsync(DateTimeOffset.UtcNow, cancellationToken);
         }
         catch (InvalidOperationException)
         {
@@ -490,12 +520,49 @@ public sealed class SupabaseAuthService
         try
         {
             await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", SessionStorageKey);
+            await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", LastActivityStorageKey);
         }
         catch (InvalidOperationException)
         {
         }
         catch (JSDisconnectedException)
         {
+        }
+    }
+
+    private async Task PersistLastActivityUtcAsync(DateTimeOffset utcNow, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await _jsRuntime.InvokeVoidAsync("localStorage.setItem", cancellationToken, LastActivityStorageKey, utcNow.ToUnixTimeSeconds().ToString());
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    private async Task<DateTimeOffset?> TryGetLastActivityUtcAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var raw = await _jsRuntime.InvokeAsync<string?>("localStorage.getItem", cancellationToken, LastActivityStorageKey);
+            if (string.IsNullOrWhiteSpace(raw) || !long.TryParse(raw, out var unixSeconds))
+            {
+                return null;
+            }
+
+            return DateTimeOffset.FromUnixTimeSeconds(unixSeconds);
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+        catch (JSDisconnectedException)
+        {
+            return null;
         }
     }
 

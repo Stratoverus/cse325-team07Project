@@ -1,4 +1,6 @@
 ﻿@namespace TaskDone.Components.Layout
+@implements IDisposable
+@using System.Linq
 
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
@@ -16,37 +18,29 @@
             </NavLink>
         </div>
 
-        <AuthorizeView>
-            <Authorized>
+        @if (AuthService.IsAuthenticated)
+        {
                 <div class="nav-item px-3">
                     <NavLink class="nav-link" href="@GetProfileUrl()">
                         <span class="bi bi-person-circle me-2 bi-nav-menu" aria-hidden="true"></span> Profile
                     </NavLink>
                 </div>
 
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="dashboard">
-                        <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Dashboard
-                    </NavLink>
-                </div>
-
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="add-task">
-                        <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Add Task
-                    </NavLink>
-                </div>
-
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="rewards">
-                        <span class="bi bi-gift-fill me-2 bi-nav-menu" aria-hidden="true"></span> Rewards
-                    </NavLink>
-                </div>
+                @foreach (var dashboardLink in familyDashboardLinks)
+                {
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="@dashboardLink.DashboardUrl">
+                            <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> @dashboardLink.DisplayName
+                        </NavLink>
+                    </div>
+                }
 
                 <div class="nav-item px-3">
                     <button class="nav-link" @onclick="HandleLogoutAsync">Logout</button>
                 </div>
-            </Authorized>
-            <NotAuthorized>
+        }
+        else
+        {
                 <div class="nav-item px-3">
                     <NavLink class="nav-link" href="login">
                         <span class="bi bi-door-open me-2"
@@ -60,8 +54,7 @@
                         aria-hidden="true"></span> Sign Up
                     </NavLink>
                 </div>
-            </NotAuthorized>
-        </AuthorizeView>
+        }
         @* 
         <!-- Removed Counter and Weather -->
         *@
@@ -70,7 +63,22 @@
 
 @code {
     [Inject] private TaskDone.Services.SupabaseAuthService AuthService { get; set; } = default!;
+    [Inject] private TaskDone.Services.RewardService RewardService { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+    private const int MaxFamilyDashboardLinks = 5;
+    private readonly List<FamilyDashboardLink> familyDashboardLinks = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthService.AuthStateChanged += HandleAuthStateChanged;
+        await RefreshFamilyDashboardLinksAsync();
+    }
+
+    public void Dispose()
+    {
+        AuthService.AuthStateChanged -= HandleAuthStateChanged;
+    }
 
     private async Task HandleLogoutAsync()
     {
@@ -78,10 +86,60 @@
         Navigation.NavigateTo("/login");
     }
 
+    private void HandleAuthStateChanged()
+    {
+        _ = InvokeAsync(async () =>
+        {
+            await RefreshFamilyDashboardLinksAsync();
+            StateHasChanged();
+        });
+    }
+
+    private async Task RefreshFamilyDashboardLinksAsync()
+    {
+        familyDashboardLinks.Clear();
+
+        if (!AuthService.IsAuthenticated ||
+            string.IsNullOrWhiteSpace(AuthService.CurrentUserId) ||
+            string.IsNullOrWhiteSpace(AuthService.CurrentSession?.AccessToken))
+        {
+            return;
+        }
+
+        var userId = AuthService.CurrentUserId;
+        var accessToken = AuthService.CurrentSession.AccessToken;
+        var memberships = await RewardService.GetFamilyMembershipsAsync(userId, accessToken);
+
+        var uniqueMemberships = memberships
+            .Where(m => !string.IsNullOrWhiteSpace(m.FamilyId))
+            .OrderByDescending(m => m.JoinedAt)
+            .DistinctBy(m => m.FamilyId)
+            .Take(MaxFamilyDashboardLinks)
+            .ToList();
+
+        for (var index = 0; index < uniqueMemberships.Count; index++)
+        {
+            var membership = uniqueMemberships[index];
+            var summary = await RewardService.GetFamilySummaryAsync(membership.FamilyId, accessToken);
+            var familyName = string.IsNullOrWhiteSpace(summary?.FamilyName)
+                ? $"Family Dashboard {index + 1}"
+                : summary.Value.FamilyName;
+
+            familyDashboardLinks.Add(new FamilyDashboardLink(familyName, GetDashboardUrl(membership.FamilyId)));
+        }
+    }
+
+    private static string GetDashboardUrl(string familyId)
+    {
+        return $"/dashboard?familyId={Uri.EscapeDataString(familyId)}";
+    }
+
     private string GetProfileUrl()
     {
         var userId = AuthService.CurrentUserId;
         return string.IsNullOrWhiteSpace(userId) ? "/profile" : $"/profile/{userId}";
     }
+
+    private sealed record FamilyDashboardLink(string DisplayName, string DashboardUrl);
 }
 
