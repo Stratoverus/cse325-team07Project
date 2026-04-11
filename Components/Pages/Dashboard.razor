@@ -64,7 +64,7 @@ else
     {
         <div class="alert alert-info d-flex align-items-center justify-content-between mb-3">
             <span>Points balance: <strong>@(currentFamilyMember.PointsBalance ?? 0) pts</strong></span>
-            <NavLink class="btn btn-sm btn-warning" href="rewards">Redeem Points</NavLink>
+            <NavLink class="btn btn-sm btn-warning" href="@($"rewards?familyId={Uri.EscapeDataString(familyId)}")">Redeem Points</NavLink>
         </div>
     }
 
@@ -376,12 +376,19 @@ else
             var pointValue = task.PointValue ?? 0;
             var updatedPoints = (currentFamilyMember.PointsBalance ?? 0) + pointValue;
             currentFamilyMember.PointsBalance = updatedPoints;
-            await RewardService.UpdatePointsAsync(currentFamilyMember.FamilyMemberId, updatedPoints, AuthService.CurrentSession?.AccessToken ?? string.Empty);
-            pointsMessage = $"You earned {pointValue} points! Total: {updatedPoints}";
-        }
-        else
-        {
-            pointsMessage = string.Empty;
+            
+            var token = AuthService.CurrentSession?.AccessToken ?? string.Empty;
+            var memberId = currentFamilyMember.FamilyMemberId;
+            
+            if (!string.IsNullOrWhiteSpace(memberId) && !string.IsNullOrWhiteSpace(token))
+            {
+                await RewardService.UpdatePointsAsync(memberId, updatedPoints, token);
+                pointsMessage = $"You earned {pointValue} points! Total: {updatedPoints}";
+            }
+            else
+            {
+                pointsMessage = $"Error: FamilyMemberId is empty — points not saved.";
+            }
         }
 
         await LoadDataAsync();

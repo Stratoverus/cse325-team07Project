@@ -25,7 +25,6 @@ else
             Your points balance: <strong>@(currentFamilyMember.PointsBalance ?? 0) pts</strong>
         </div>
     }
-
     @if (!string.IsNullOrWhiteSpace(message))
     {
         <div class="alert alert-success">@message</div>
@@ -98,7 +97,7 @@ else
     private string familyId = string.Empty;
     private FamilyMember? currentFamilyMember = null;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
         var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
         var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
@@ -112,9 +111,11 @@ else
             currentProfile = await UserProfileService.GetProfileAsync(userId, token);
 
             var memberships = await RewardService.GetFamilyMembershipsAsync(userId, token);
+
             var membership = string.IsNullOrWhiteSpace(familyIdFromUrl)
                 ? memberships.FirstOrDefault()
-                : memberships.FirstOrDefault(m => m.FamilyId == familyIdFromUrl);
+                : memberships.FirstOrDefault(m => 
+                    string.Equals(m.FamilyId?.Trim(), familyIdFromUrl?.Trim(), StringComparison.OrdinalIgnoreCase));
 
             currentFamilyMember = membership;
             familyId = membership?.FamilyId ?? string.Empty;
@@ -127,6 +128,7 @@ else
             {
                 errorMessage = "You are not part of a family yet. Create or join a family first.";
             }
+            StateHasChanged(); 
         }
     }
 

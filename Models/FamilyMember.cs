@@ -8,6 +8,7 @@ namespace TaskDone.Models;
 public sealed class FamilyMember : BaseModel
 {
     [PrimaryKey("family_member_id", false)]
+    [JsonPropertyName("family_member_id")]
     public string FamilyMemberId { get; set; } = Guid.NewGuid().ToString();
 
     [Column("family_id")]

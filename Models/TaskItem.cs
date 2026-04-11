@@ -39,7 +39,7 @@ public class TaskItem : BaseModel
     public DateTime? UpdatedAt { get; set; }
 
     [Column("point_value")]
-    public int? PointValue { get; set; }
+    public int? PointValue { get; set; } = 10;
 
     [Column("is_accepted")]
     public bool IsAccepted { get; set; } = false;
