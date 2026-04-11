@@ -1,0 +1,148 @@
+@page "/account-settings"
+@rendermode InteractiveServer
+
+@using TaskDone.Models
+@inject UserProfileService UserProfileService
+@inject SupabaseAuthService AuthService
+
+<h1>Profile Settings</h1>
+
+@if (!isLoaded)
+{
+    <div class="spinner-border"></div>
+}
+else if (profile == null)
+{
+    <p>Unable to load profile.</p>
+}
+else
+{
+    <EditForm Model="profile" OnValidSubmit="SaveProfile" FormName="AccountSettingsForm">
+        <DataAnnotationsValidator />
+
+        <div class="row g-3">
+            <div class="mb-3">
+                <label class="form-label">Email</label>
+                <InputText class="form-control" @bind-Value="profile.Email" Disabled />
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label">Full Name</label>
+                <InputText class="form-control" @bind-Value="profile.FullName" />
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label">Preferred Display Name</label>
+                <InputText class="form-control" @bind-Value="profile.PreferredDisplayName" />
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">Age</label>
+                <InputNumber class="form-control" @bind-Value="profile.Age" />
+            </div>
+
+            <div class="col-md-8">
+                <label class="form-label">Time Zone</label>
+                <InputSelect class="form-select" @bind-Value="profile.TimeZone">
+                    @foreach (var tz in timeZoneOptions)
+                    {
+                        <option value="@tz.Id">@tz.Label</option>
+                    }
+                </InputSelect>
+            </div>
+        </div>
+
+        <div class="mt-4">
+            <button type="submit" class="btn btn-primary">
+                Save Changes
+            </button>
+        </div>
+    </EditForm>
+
+    @if (saved)
+    {
+        <div class="alert alert-success mt-3">
+            Profile updated successfully!
+        </div>
+    }
+}
+
+@code {
+
+    private UserProfile? profile;
+    private bool saved = false;
+    private bool isLoaded = false;
+
+    private readonly IReadOnlyList<TimeZoneOption> timeZoneOptions = BuildTimeZoneOptions();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        await AuthService.EnsureSessionRestoredAsync();
+
+        var userId = AuthService.CurrentUserId;
+        var token = AuthService.CurrentSession?.AccessToken;
+
+        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(token))
+        {
+            isLoaded = true;
+            StateHasChanged();
+            return;
+        }
+
+        profile = await UserProfileService.EnsureDraftProfileAsync(
+            userId,
+            AuthService.CurrentUserEmail ?? "",
+            token
+        );
+
+        isLoaded = true;
+
+        StateHasChanged();
+    }
+
+    private async Task SaveProfile()
+    {
+        if (profile == null)
+            return;
+
+        if (string.IsNullOrWhiteSpace(profile.FullName))
+            return;
+
+        if (string.IsNullOrWhiteSpace(profile.PreferredDisplayName))
+            profile.PreferredDisplayName = profile.FullName;
+
+        if (string.IsNullOrWhiteSpace(profile.TimeZone))
+            profile.TimeZone = TimeZoneInfo.Local.Id;
+
+        var token = AuthService.CurrentSession?.AccessToken;
+
+        if (string.IsNullOrEmpty(token))
+            return;
+
+        profile = await UserProfileService.SaveProfileAsync(profile, token);
+        saved = true;
+    }
+
+    private static IReadOnlyList<TimeZoneOption> BuildTimeZoneOptions()
+    {
+        var nowUtc = DateTime.UtcNow;
+
+        return TimeZoneInfo.GetSystemTimeZones()
+            .Select(tz =>
+            {
+                var offset = tz.GetUtcOffset(nowUtc);
+                var sign = offset < TimeSpan.Zero ? "-" : "+";
+                var absolute = offset.Duration();
+                var label = $"(UTC{sign}{absolute.Hours:D2}:{absolute.Minutes:D2}) {tz.DisplayName}";
+
+                return new TimeZoneOption(tz.Id, label);
+            })
+            .OrderBy(x => x.Label)
+            .ToList();
+    }
+
+    private sealed record TimeZoneOption(string Id, string Label);
+}
