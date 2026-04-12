@@ -1,4 +1,5 @@
 @page "/rewards"
+@implements IDisposable
 @rendermode InteractiveServer
 
 @using TaskDone.Services
@@ -96,12 +97,33 @@ else
     private string errorMessage = string.Empty;
     private string familyId = string.Empty;
     private FamilyMember? currentFamilyMember = null;
+    private string? _lastFamilyId = null;
 
-    protected override async Task OnParametersSetAsync()
+    protected override async Task OnInitializedAsync()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        await LoadDataAsync();
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            await LoadDataAsync();
+            StateHasChanged();
+        });
+    }
+
+    private async Task LoadDataAsync()
     {
         var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
         var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
         var familyIdFromUrl = query["familyId"];
+
+        if (familyIdFromUrl == _lastFamilyId && _lastFamilyId != null)
+            return;
+
+        _lastFamilyId = familyIdFromUrl;
 
         var userId = AuthService.CurrentUserId;
         var token = AuthService.CurrentSession?.AccessToken;
@@ -111,10 +133,9 @@ else
             currentProfile = await UserProfileService.GetProfileAsync(userId, token);
 
             var memberships = await RewardService.GetFamilyMembershipsAsync(userId, token);
-
             var membership = string.IsNullOrWhiteSpace(familyIdFromUrl)
                 ? memberships.FirstOrDefault()
-                : memberships.FirstOrDefault(m => 
+                : memberships.FirstOrDefault(m =>
                     string.Equals(m.FamilyId?.Trim(), familyIdFromUrl?.Trim(), StringComparison.OrdinalIgnoreCase));
 
             currentFamilyMember = membership;
@@ -128,8 +149,12 @@ else
             {
                 errorMessage = "You are not part of a family yet. Create or join a family first.";
             }
-            StateHasChanged(); 
         }
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
     }
 
     async Task AddReward()
