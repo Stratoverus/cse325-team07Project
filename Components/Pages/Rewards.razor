@@ -1,4 +1,5 @@
 @page "/rewards"
+@implements IDisposable
 @rendermode InteractiveServer
 
 @using TaskDone.Services
@@ -7,6 +8,7 @@
 @inject TaskDone.Services.SupabaseAuthService AuthService
 @inject TaskDone.Services.UserProfileService UserProfileService
 @inject TaskDone.Services.RewardService RewardService
+@inject NavigationManager Navigation
 
 <h3>Rewards</h3>
 
@@ -24,7 +26,6 @@ else
             Your points balance: <strong>@(currentFamilyMember.PointsBalance ?? 0) pts</strong>
         </div>
     }
-
     @if (!string.IsNullOrWhiteSpace(message))
     {
         <div class="alert alert-success">@message</div>
@@ -96,17 +97,49 @@ else
     private string errorMessage = string.Empty;
     private string familyId = string.Empty;
     private FamilyMember? currentFamilyMember = null;
+    private string? _lastFamilyId = null;
 
     protected override async Task OnInitializedAsync()
     {
+        Navigation.LocationChanged += OnLocationChanged;
+        await LoadDataAsync();
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            await LoadDataAsync();
+            StateHasChanged();
+        });
+    }
+
+    private async Task LoadDataAsync()
+    {
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        var familyIdFromUrl = query["familyId"];
+
+        if (familyIdFromUrl == _lastFamilyId && _lastFamilyId != null)
+            return;
+
+        _lastFamilyId = familyIdFromUrl;
+
         var userId = AuthService.CurrentUserId;
         var token = AuthService.CurrentSession?.AccessToken;
 
         if (!string.IsNullOrWhiteSpace(userId) && !string.IsNullOrWhiteSpace(token))
         {
             currentProfile = await UserProfileService.GetProfileAsync(userId, token);
-            familyId = await RewardService.GetFamilyIdAsync(userId, token) ?? string.Empty;
-            currentFamilyMember = await RewardService.GetFamilyMemberAsync(userId, token);
+
+            var memberships = await RewardService.GetFamilyMembershipsAsync(userId, token);
+            var membership = string.IsNullOrWhiteSpace(familyIdFromUrl)
+                ? memberships.FirstOrDefault()
+                : memberships.FirstOrDefault(m =>
+                    string.Equals(m.FamilyId?.Trim(), familyIdFromUrl?.Trim(), StringComparison.OrdinalIgnoreCase));
+
+            currentFamilyMember = membership;
+            familyId = membership?.FamilyId ?? string.Empty;
 
             if (!string.IsNullOrWhiteSpace(familyId))
             {
@@ -117,6 +150,11 @@ else
                 errorMessage = "You are not part of a family yet. Create or join a family first.";
             }
         }
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
     }
 
     async Task AddReward()
