@@ -6,6 +6,7 @@
 @inject TaskDone.Services.RewardService RewardService
 @inject NavigationManager Navigation
 @inject Supabase.Client SupabaseClient
+@inject FamilyService FamilyService
 
 <PageTitle>Profile</PageTitle>
 
@@ -181,14 +182,26 @@
                                                 <p class="text-muted mb-0">@familyTile.RoleLabel</p>
                                             </div>
 
-                                            @if (familyTile.IsCreator)
-                                            {
-                                                <span class="badge bg-success">Creator</span>
-                                            }
-                                            else
-                                            {
-                                                <span class="badge bg-secondary">Member</span>
-                                            }
+                                            <div class="d-flex align-items-center gap-2">
+                                                @if (familyTile.IsCreator)
+                                                {
+                                                    <button class="btn btn-sm btn-outline-secondary"
+                                                            title="Family Settings"
+                                                            style="padding: 2px 5px;"
+                                                            @onclick="() => OpenFamilySettings(familyTile)">
+                                                        ⚙️
+                                                    </button>
+                                                }
+
+                                                @if (familyTile.IsCreator)
+                                                {
+                                                    <span class="badge bg-success">Creator</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary">Member</span>
+                                                }
+                                            </div>
                                         </div>
 
                                         <hr />
@@ -202,6 +215,32 @@
                                                 Open Dashboard
                                             </button>
                                         </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+
+                        @if (showFamilySettingsModal && selectedFamily != null)
+                        {
+                            <div class="modal fade show" style="display: block; background: rgba(0,0,0,0.5);">
+                                <div class="modal-dialog">
+                                    <div class="modal-content shadow-lg">
+
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">Family Settings</h5>
+                                            <button type="button" class="btn-close" @onclick="CloseFamilySettings"></button>
+                                        </div>
+
+                                        <div class="modal-body">
+                                            <label class="form-label fw-bold">Family Name</label>
+                                            <input class="form-control" @bind="editableName" />
+                                        </div>
+
+                                        <div class="modal-footer">
+                                            <button class="btn btn-secondary" @onclick="CloseFamilySettings">Cancel</button>
+                                            <button class="btn btn-primary" @onclick="SaveFamilyName">Save</button>
+                                        </div>
+
                                     </div>
                                 </div>
                             </div>
@@ -703,5 +742,50 @@
         }
     }
 
+    private void OpenFamilySettings(FamilyTileViewModel family)
+    {
+        selectedFamily = family;
+        editableName = family.FamilyName;
+        showFamilySettingsModal = true;
+    }
 
+    private FamilyTileViewModel? selectedFamily;
+    private bool showFamilySettingsModal = false;
+    private string editableName = "";
+
+    private async Task SaveFamilyName()
+    {
+        if (selectedFamily == null)
+            return;
+
+        try
+        {
+            await FamilyService.UpdateFamilyNameAsync(
+                selectedFamily.FamilyId,
+                editableName
+            );
+
+            var index = familyTiles.FindIndex(f => f.FamilyId == selectedFamily.FamilyId);
+            if (index >= 0)
+            {
+                familyTiles[index] = familyTiles[index] with
+                {
+                    FamilyName = editableName
+                };
+            }
+
+            familyMessage = "Family updated!";
+            CloseFamilySettings();
+        }
+        catch (Exception ex)
+        {
+            familyMessage = ex.Message;
+        }
+    }
+
+    private void CloseFamilySettings()
+    {
+        showFamilySettingsModal = false;
+        selectedFamily = null;
+    }
 }
