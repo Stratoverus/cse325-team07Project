@@ -139,7 +139,13 @@ else
                             </td>
                             <td>@(task.DueDate?.ToShortDateString() ?? "No due date")</td>
                             <td>
-                                @if (!task.IsAccepted)
+                                @if(!task.IsAccepted && currentFamilyMember != null && 
+                                    @* string.Equals(currentFamilyMember.Role, "parent", StringComparison.OrdinalIgnoreCase) && *@
+                                    !string.Equals(task.AssignedToUserId, AuthService.CurrentUserId, StringComparison.OrdinalIgnoreCase)) 
+                                {
+                                    <p class="my-auto m-0 text-secondary">Waiting to be accepted.</p>
+                                }                               
+                                else if (!task.IsAccepted)
                                 {
                                     <button class="btn btn-sm btn-outline-primary" @onclick="() => AcceptTaskAsync(task)" disabled="@(processingTaskId == task.TaskId)">
                                         @if (processingTaskId == task.TaskId)
