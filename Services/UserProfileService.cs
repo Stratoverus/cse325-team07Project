@@ -135,7 +135,6 @@ public sealed class UserProfileService
         {
             UserId = profile.UserId,
             Email = profile.Email,
-            FirstName = profile.FirstName,
             FullName = profile.FullName,
             Age = profile.Age,
             PreferredDisplayName = profile.PreferredDisplayName,
@@ -152,7 +151,6 @@ public sealed class UserProfileService
         {
             UserId = row.UserId,
             Email = row.Email,
-            FirstName = row.FirstName,
             FullName = row.FullName,
             Age = row.Age,
             PreferredDisplayName = row.PreferredDisplayName,
@@ -185,8 +183,8 @@ public sealed class UserProfileService
         [JsonPropertyName("preferred_display_name")]
         public string PreferredDisplayName { get; set; } = string.Empty;
 
-        [JsonPropertyName("first_name")]
-        public string FirstName { get; set; } = string.Empty;
+        /* [JsonPropertyName("first_name")]
+        public string FirstName { get; set; } = string.Empty; */
 
         [JsonPropertyName("time_zone")]
         public string TimeZone { get; set; } = string.Empty;

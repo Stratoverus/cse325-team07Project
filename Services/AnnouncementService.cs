@@ -162,10 +162,12 @@ public sealed class AnnouncementService
             return createdByUserId;
         }
 
+        /* 
         if (!string.IsNullOrWhiteSpace(profile.FirstName))
         {
             return profile.FirstName;
         }
+        */
 
         if (!string.IsNullOrWhiteSpace(profile.PreferredDisplayName))
         {
